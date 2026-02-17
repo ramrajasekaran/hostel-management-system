@@ -1512,6 +1512,9 @@ const StudentMessModule = ({ studentId }) => {
     React.useEffect(() => {
         fetchTokens();
         fetchConfig();
+        // Auto-poll config every 10 seconds for real-time session updates
+        const interval = setInterval(fetchConfig, 10000);
+        return () => clearInterval(interval);
     }, [fetchTokens, fetchConfig]);
 
     const handleGenerate = async (type) => {
