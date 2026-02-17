@@ -1,0 +1,320 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  /* HMS Arena Premium Palette */
+  --primary: #e11d48;
+  /* Vibrant Rose/Crimson */
+  --primary-hover: #be123c;
+  --bg-dark: #09090b;
+  /* Deep Zinc Black */
+  --bg-card: #18181b;
+  /* Zinc Card */
+  --accent-blue: #3b82f6;
+
+  /* Gradients */
+  --grad-premium: linear-gradient(135deg, #e11d48 0%, #4c0519 100%);
+  --grad-surface: linear-gradient(180deg, rgba(24, 24, 27, 0.8) 0%, rgba(9, 9, 11, 0.95) 100%);
+
+  /* Glassmorphism */
+  --glass: rgba(255, 255, 255, 0.03);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --shadow-premium: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 10px 10px -5px rgba(0, 0, 0, 0.4);
+
+  --text-main: #fafafa;
+  --text-muted: #a1a1aa;
+  --border-main: #27272a;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  min-height: 100vh;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Animations */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.5s ease-out forwards;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.4s ease-out forwards;
+}
+
+/* Core Components */
+.arena-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-main);
+  border-radius: 16px;
+  padding: 2.5rem;
+  box-shadow: var(--shadow-premium);
+  backdrop-filter: blur(8px);
+}
+
+.arena-input {
+  background: #27272a !important;
+  /* Zinc-800 - Definitive color */
+  border: 1.5px solid #3f3f46 !important;
+  /* Visible border */
+  color: #ffffff !important;
+  /* Force pure white */
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  width: 100%;
+  outline: none;
+  transition: all 0.2s;
+  font-size: 1rem;
+}
+
+select.arena-input {
+  cursor: pointer;
+  appearance: none;
+}
+
+/* Ensure the time input supports typing and selection with AM/PM visible */
+.arena-input[type="time"] {
+  min-width: 150px;
+}
+
+.arena-input::-webkit-datetime-edit-fields-wrapper {
+  display: flex;
+}
+
+.arena-input::-webkit-datetime-edit-ampm-field {
+  background-color: var(--primary);
+  border-radius: 4px;
+  padding: 0 4px;
+  margin-left: 4px;
+  color: white !important;
+  text-transform: uppercase;
+}
+
+/* Force text visibility inside all date/time fields */
+.arena-input::-webkit-datetime-edit,
+.arena-input::-webkit-datetime-edit-text,
+.arena-input::-webkit-datetime-edit-month-field,
+.arena-input::-webkit-datetime-edit-day-field,
+.arena-input::-webkit-datetime-edit-year-field,
+.arena-input::-webkit-datetime-edit-hour-field,
+.arena-input::-webkit-datetime-edit-minute-field {
+  color: #ffffff !important;
+}
+
+/* Custom styles for picker indicators */
+.arena-input::-webkit-calendar-picker-indicator {
+  filter: invert(1) brightness(1.5);
+  cursor: pointer;
+  opacity: 0.8;
+}
+
+.arena-input::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+.arena-input:focus {
+  border-color: var(--primary) !important;
+  background: #2d2d30 !important;
+  box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.1);
+}
+
+/* Fix browser autofill turning inputs white */
+.arena-input:-webkit-autofill,
+.arena-input:-webkit-autofill:hover,
+.arena-input:-webkit-autofill:focus,
+.arena-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px var(--bg-card) inset !important;
+  -webkit-text-fill-color: var(--text-main) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.arena-input option {
+  background-color: #18181b;
+  /* Matches var(--bg-card) */
+  color: white;
+}
+
+.arena-btn {
+  background: var(--grad-premium);
+  color: white;
+  padding: 0.8rem 2rem;
+  border-radius: 10px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.arena-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(225, 29, 72, 0.3);
+}
+
+.arena-link {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s;
+}
+
+.arena-link:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.text-grad {
+  background: var(--grad-premium);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+}
+
+/* Student Dashboard Tabs & Modules */
+.section-title {
+  margin-bottom: 1.5rem;
+  font-size: 1.1rem;
+  color: var(--accent-blue);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.section-title::before {
+  content: '';
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--accent-blue);
+}
+
+.profile-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  transform: translateY(-1px);
+}
+
+/* Auth Pages Layout */
+.auth-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background: radial-gradient(circle at top right, rgba(225, 29, 72, 0.05), transparent),
+    radial-gradient(circle at bottom left, rgba(59, 130, 246, 0.03), transparent);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 450px;
+}
+
+/* --- RESPONSIVE DESIGN --- */
+
+/* Tablet & Mobile (Standard) */
+@media (max-width: 768px) {
+  .arena-card {
+    padding: 1.5rem !important;
+  }
+
+  .auth-card {
+    padding: 1.5rem !important;
+  }
+
+  /* Force single column for dashboard forms/grids */
+  .responsive-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 1.5rem !important;
+  }
+
+  .mobile-stack {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1.5rem !important;
+  }
+
+  .mobile-span-all {
+    grid-column: span 1 !important;
+  }
+}
+
+/* Small Mobile */
+@media (max-width: 480px) {
+  header {
+    flex-direction: column !important;
+    gap: 1rem !important;
+    text-align: center !important;
+    align-items: center !important;
+  }
+
+  .arena-card {
+    padding: 1.25rem !important;
+    border-radius: 12px !important;
+  }
+
+  .section-title {
+    font-size: 1rem !important;
+  }
+
+  .arena-btn {
+    width: 100% !important;
+    padding: 0.75rem 1.5rem !important;
+  }
+
+  /* Adjust Census Grid */
+  .census-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
