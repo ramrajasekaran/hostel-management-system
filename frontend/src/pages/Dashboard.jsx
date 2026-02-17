@@ -1537,7 +1537,7 @@ const StudentMessModule = ({ studentId }) => {
     };
 
     const isRegistrationOpen = () => {
-        if (!config || config.specialFoodSession === 'None' || !config.specialFoodStartTime || !config.specialFoodEndTime) return false;
+        if (!config || config.specialFoodSession === 'None' || !config.specialFoodStartTime || !config.specialFoodEndTime || config.specialFoodClosed) return false;
 
         const now = new Date();
         const d = String(now.getDate()).padStart(2, '0');
@@ -1566,6 +1566,7 @@ const StudentMessModule = ({ studentId }) => {
 
     const registrationStatusMsg = () => {
         if (!config || config.specialFoodSession === 'None') return 'No special food scheduled.';
+        if (config.specialFoodClosed) return 'Registration manually closed by warden. 🛑';
 
         const now = new Date();
         const d = String(now.getDate()).padStart(2, '0');
@@ -1638,7 +1639,7 @@ const StudentMessModule = ({ studentId }) => {
                             }}>
                                 {session === 'breakfast' ? '🍳' : session === 'lunch' ? '🍛' : '🍱'} {session}
                             </h5>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', opacity: config?.regularMenu?.[session]?.isClosed ? 0.3 : 1 }}>
                                 <div>
                                     <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Main Dish</p>
                                     <p style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-main)' }}>
@@ -1652,6 +1653,33 @@ const StudentMessModule = ({ studentId }) => {
                                     </p>
                                 </div>
                             </div>
+                            {config?.regularMenu?.[session]?.isClosed && (
+                                <div style={{
+                                    position: 'absolute',
+                                    top: 0,
+                                    left: 0,
+                                    width: '100%',
+                                    height: '100%',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    background: 'rgba(0,0,0,0.4)',
+                                    backdropFilter: 'blur(2px)',
+                                    zIndex: 2
+                                }}>
+                                    <span style={{
+                                        color: '#ef4444',
+                                        fontWeight: 'bold',
+                                        fontSize: '0.8rem',
+                                        background: 'rgba(0,0,0,0.8)',
+                                        padding: '4px 12px',
+                                        borderRadius: '20px',
+                                        border: '1px solid #ef444444'
+                                    }}>
+                                        🛑 Session Closed
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     ))}
                 </div>
@@ -1762,13 +1790,14 @@ const MessManagementModule = () => {
         specialFoodSession: 'None'
     });
     const [regularMenu, setRegularMenu] = React.useState({
-        breakfast: { mainDish: '', sideDish: '' },
-        lunch: { mainDish: '', sideDish: '' },
-        dinner: { mainDish: '', sideDish: '' }
+        breakfast: { mainDish: '', sideDish: '', isClosed: false },
+        lunch: { mainDish: '', sideDish: '', isClosed: false },
+        dinner: { mainDish: '', sideDish: '', isClosed: false }
     });
     const [menuPublished, setMenuPublished] = React.useState(false);
     const [masterList, setMasterList] = React.useState([]);
     const [newFoodItem, setNewFoodItem] = React.useState('');
+    const [specialFoodClosed, setSpecialFoodClosed] = React.useState(false);
 
     const fetchConfig = React.useCallback(async () => {
         try {
@@ -1796,11 +1825,14 @@ const MessManagementModule = () => {
                     specialFoodSession: data.specialFoodSession || 'None'
                 });
             }
+            if (data?.specialFoodClosed !== undefined) {
+                setSpecialFoodClosed(data.specialFoodClosed);
+            }
             if (data?.regularMenu) {
                 setRegularMenu({
-                    breakfast: data.regularMenu.breakfast || { mainDish: '', sideDish: '' },
-                    lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '' },
-                    dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '' }
+                    breakfast: data.regularMenu.breakfast || { mainDish: '', sideDish: '', isClosed: false },
+                    lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '', isClosed: false },
+                    dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '', isClosed: false }
                 });
             }
             if (data?.specialFoodMasterList) {
@@ -2159,6 +2191,24 @@ const MessManagementModule = () => {
                                     />
                                 </div>
                             </div>
+                            <div style={{ marginTop: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                <input
+                                    type="checkbox"
+                                    id={`close-${session}`}
+                                    checked={regularMenu[session].isClosed}
+                                    onChange={e => {
+                                        setRegularMenu({
+                                            ...regularMenu,
+                                            [session]: { ...regularMenu[session], isClosed: e.target.checked }
+                                        });
+                                        setMenuPublished(false);
+                                    }}
+                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                />
+                                <label htmlFor={`close-${session}`} style={{ fontSize: '0.8rem', color: regularMenu[session].isClosed ? '#ef4444' : 'var(--text-muted)', cursor: 'pointer', fontWeight: regularMenu[session].isClosed ? 'bold' : 'normal' }}>
+                                    {regularMenu[session].isClosed ? '🛑 Session Manually Closed' : '🔓 Session Open for Students'}
+                                </label>
+                            </div>
                         </div>
                     ))}
                     <button
@@ -2221,7 +2271,40 @@ const MessManagementModule = () => {
                     </div>
 
                     <div className="arena-card animate-slide-up">
-                        <h3 className="section-title">Special Food Set (Scheduling)</h3>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                            <h3 className="section-title" style={{ margin: 0 }}>Special Food Set (Scheduling)</h3>
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setLoading(true);
+                                    try {
+                                        const res = await fetch('http://localhost:5000/api/student/config', {
+                                            method: 'POST',
+                                            headers: {
+                                                'Content-Type': 'application/json',
+                                                'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                            },
+                                            body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                        });
+                                        if (res.ok) {
+                                            setSpecialFoodClosed(!specialFoodClosed);
+                                            alert(!specialFoodClosed ? 'Special Food Registration CLOSED! 🛑' : 'Special Food Registration OPENED! 🟢');
+                                        }
+                                    } catch (err) { }
+                                    setLoading(false);
+                                }}
+                                className="arena-btn"
+                                style={{
+                                    fontSize: '0.75rem',
+                                    padding: '0.5rem 1rem',
+                                    background: specialFoodClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                    color: specialFoodClosed ? '#22c55e' : '#ef4444',
+                                    borderColor: specialFoodClosed ? '#22c55e' : '#ef4444'
+                                }}
+                            >
+                                {specialFoodClosed ? '🟢 Re-open Registration' : '🛑 Force Close Registration'}
+                            </button>
+                        </div>
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             setLoading(true);
