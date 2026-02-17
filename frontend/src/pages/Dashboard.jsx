@@ -1798,6 +1798,7 @@ const MessManagementModule = () => {
     const [masterList, setMasterList] = React.useState([]);
     const [newFoodItem, setNewFoodItem] = React.useState('');
     const [specialFoodClosed, setSpecialFoodClosed] = React.useState(false);
+    const [activeMenuSession, setActiveMenuSession] = React.useState('breakfast');
 
     const fetchConfig = React.useCallback(async () => {
         try {
@@ -2130,134 +2131,100 @@ const MessManagementModule = () => {
                 </form>
             </div>
 
-            {/* Daily Regular Menu Management - Always Visible */}
+            {/* Daily Regular Menu & Session Control - Merged */}
             <div className="arena-card animate-slide-up">
-                <h3 className="section-title">Daily Regular Menu Management</h3>
+                <h3 className="section-title">Daily Regular Menu & Session Control</h3>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    Set the regular main and side dishes for the current day. Students will see this in their Mess tab.
+                    Select a session tab, set its menu, and control availability for students.
                 </p>
-                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-                    {['breakfast', 'lunch', 'dinner'].map((session) => (
-                        <div key={session} style={{
-                            padding: '1.5rem',
-                            background: 'rgba(255,255,255,0.02)',
-                            borderRadius: '12px',
-                            border: '1px solid rgba(255,255,255,0.05)'
-                        }}>
-                            <h4 style={{
-                                fontSize: '0.9rem',
-                                marginBottom: '1rem',
-                                color: 'var(--accent-blue)',
-                                textTransform: 'capitalize',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '8px'
-                            }}>
-                                {session === 'breakfast' ? '🍳' : session === 'lunch' ? '🍛' : '🍱'} {session} Menu
-                            </h4>
-                            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                <div>
-                                    <label className="field-label">Main Dish</label>
-                                    <input
-                                        type="text"
-                                        className="arena-input"
-                                        value={regularMenu[session].mainDish}
-                                        onChange={e => {
-                                            setRegularMenu({
-                                                ...regularMenu,
-                                                [session]: { ...regularMenu[session], mainDish: e.target.value }
-                                            });
-                                            setMenuPublished(false);
-                                        }}
-                                        placeholder={`e.g. ${session === 'breakfast' ? 'Idly' : session === 'lunch' ? 'Rice' : 'Chappathi'}`}
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="field-label">Side Dish</label>
-                                    <input
-                                        type="text"
-                                        className="arena-input"
-                                        value={regularMenu[session].sideDish}
-                                        onChange={e => {
-                                            setRegularMenu({
-                                                ...regularMenu,
-                                                [session]: { ...regularMenu[session], sideDish: e.target.value }
-                                            });
-                                            setMenuPublished(false);
-                                        }}
-                                        placeholder={`e.g. ${session === 'breakfast' ? 'Sambar' : 'Curry'}`}
-                                        required
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                    <button
-                        type="submit"
-                        className="arena-btn"
-                        style={{
-                            width: 'fit-content',
-                            padding: '0.8rem 2rem',
-                            background: menuPublished ? 'rgba(34,197,94,0.2)' : '',
-                            color: menuPublished ? '#22c55e' : '',
-                            borderColor: menuPublished ? 'rgba(34,197,94,0.3)' : ''
-                        }}
-                        disabled={loading}
-                    >
-                        {menuPublished ? '✅ Published Regular Menu' : '🍙 Publish Regular Menu'}
-                    </button>
-                </form>
-            </div>
 
-            {/* Unified Mess Session Control */}
-            <div className="arena-card animate-slide-up" style={{
-                border: '1px solid rgba(239,68,68,0.15)',
-                background: 'rgba(239,68,68,0.02)'
-            }}>
-                <h3 className="section-title">🔒 Mess Session Control</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    Close or open a session. Closed sessions are hidden from students.
-                </p>
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-                    <div style={{ flex: 1, minWidth: '200px' }}>
-                        <label className="field-label">Select Session</label>
-                        <select
-                            className="arena-input"
-                            id="session-control-select"
-                            defaultValue="breakfast"
-                        >
-                            <option value="breakfast">🍳 Breakfast</option>
-                            <option value="lunch">🍛 Lunch</option>
-                            <option value="dinner">🍱 Dinner</option>
-                            {config.feeStructureType === 'Separate' && (
-                                <option value="specialTokens">🎫 Special Food Tokens</option>
-                            )}
-                        </select>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={async () => {
-                            const sel = document.getElementById('session-control-select').value;
-                            setLoading(true);
-                            try {
-                                if (sel === 'specialTokens') {
-                                    const res = await fetch('http://localhost:5000/api/student/config', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                                        },
-                                        body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                {/* Session Tabs */}
+                <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {['breakfast', 'lunch', 'dinner'].map(s => {
+                        const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+                        const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
+                        const isActive = activeMenuSession === s;
+                        return (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => setActiveMenuSession(s)}
+                                style={{
+                                    flex: 1,
+                                    padding: '0.8rem 1rem',
+                                    background: isActive ? `${colors[s]}22` : 'rgba(255,255,255,0.02)',
+                                    border: 'none',
+                                    borderBottom: isActive ? `3px solid ${colors[s]}` : '3px solid transparent',
+                                    color: isActive ? colors[s] : 'var(--text-muted)',
+                                    fontWeight: isActive ? 'bold' : 'normal',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer',
+                                    textTransform: 'capitalize',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                {icons[s]} {s}
+                                {regularMenu[s].isClosed && (
+                                    <span style={{ fontSize: '0.55rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: '8px' }}>CLOSED</span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                {/* Menu Input for Active Session */}
+                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div>
+                            <label className="field-label">Main Dish</label>
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={regularMenu[activeMenuSession].mainDish}
+                                onChange={e => {
+                                    setRegularMenu({
+                                        ...regularMenu,
+                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], mainDish: e.target.value }
                                     });
-                                    if (res.ok) {
-                                        setSpecialFoodClosed(!specialFoodClosed);
-                                        alert(!specialFoodClosed ? 'Special Food Registration CLOSED! 🛑' : 'Special Food Registration OPENED! 🟢');
-                                    }
-                                } else {
+                                    setMenuPublished(false);
+                                }}
+                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Idly' : activeMenuSession === 'lunch' ? 'Rice' : 'Chappathi'}`}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="field-label">Side Dish</label>
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={regularMenu[activeMenuSession].sideDish}
+                                onChange={e => {
+                                    setRegularMenu({
+                                        ...regularMenu,
+                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], sideDish: e.target.value }
+                                    });
+                                    setMenuPublished(false);
+                                }}
+                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Sambar' : 'Curry'}`}
+                                required
+                            />
+                        </div>
+                    </div>
+
+                    {/* Close/Open Toggle + Publish */}
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <button
+                            type="button"
+                            onClick={async () => {
+                                setLoading(true);
+                                try {
                                     const updatedMenu = {
                                         ...regularMenu,
-                                        [sel]: { ...regularMenu[sel], isClosed: !regularMenu[sel].isClosed },
+                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], isClosed: !regularMenu[activeMenuSession].isClosed },
                                         lastUpdated: new Date()
                                     };
                                     const res = await fetch('http://localhost:5000/api/student/config', {
@@ -2270,29 +2237,47 @@ const MessManagementModule = () => {
                                     });
                                     if (res.ok) {
                                         setRegularMenu(updatedMenu);
-                                        const label = sel.charAt(0).toUpperCase() + sel.slice(1);
-                                        alert(updatedMenu[sel].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
+                                        const label = activeMenuSession.charAt(0).toUpperCase() + activeMenuSession.slice(1);
+                                        alert(updatedMenu[activeMenuSession].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
                                     }
-                                }
-                            } catch (err) { }
-                            setLoading(false);
-                        }}
-                        className="arena-btn"
-                        style={{
-                            padding: '0.8rem 1.5rem',
-                            whiteSpace: 'nowrap'
-                        }}
-                        disabled={loading}
-                    >
-                        🔄 Toggle Selected Session
-                    </button>
-                </div>
-                <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                                } catch (err) { }
+                                setLoading(false);
+                            }}
+                            className="arena-btn"
+                            style={{
+                                padding: '0.7rem 1.2rem',
+                                fontSize: '0.8rem',
+                                background: regularMenu[activeMenuSession].isClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                color: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444',
+                                borderColor: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444'
+                            }}
+                            disabled={loading}
+                        >
+                            {regularMenu[activeMenuSession].isClosed ? '🟢 Open Session' : '🛑 Close Session'}
+                        </button>
+                        <button
+                            type="submit"
+                            className="arena-btn"
+                            style={{
+                                padding: '0.7rem 1.5rem',
+                                background: menuPublished ? 'rgba(34,197,94,0.2)' : '',
+                                color: menuPublished ? '#22c55e' : '',
+                                borderColor: menuPublished ? 'rgba(34,197,94,0.3)' : ''
+                            }}
+                            disabled={loading}
+                        >
+                            {menuPublished ? '✅ Published' : '🍙 Publish All Menus'}
+                        </button>
+                    </div>
+                </form>
+
+                {/* Status Badges */}
+                <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     {['breakfast', 'lunch', 'dinner'].map(s => (
                         <span key={s} style={{
                             padding: '4px 14px',
                             borderRadius: '20px',
-                            fontSize: '0.75rem',
+                            fontSize: '0.73rem',
                             fontWeight: 'bold',
                             background: regularMenu[s].isClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
                             color: regularMenu[s].isClosed ? '#ef4444' : '#22c55e',
@@ -2303,16 +2288,37 @@ const MessManagementModule = () => {
                         </span>
                     ))}
                     {config.feeStructureType === 'Separate' && (
-                        <span style={{
-                            padding: '4px 14px',
-                            borderRadius: '20px',
-                            fontSize: '0.75rem',
-                            fontWeight: 'bold',
-                            background: specialFoodClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                            color: specialFoodClosed ? '#ef4444' : '#22c55e',
-                            border: `1px solid ${specialFoodClosed ? '#ef444433' : '#22c55e33'}`
-                        }}>
-                            {specialFoodClosed ? '🛑' : '🟢'} Special Tokens
+                        <span
+                            onClick={async () => {
+                                setLoading(true);
+                                try {
+                                    const res = await fetch('http://localhost:5000/api/student/config', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                        },
+                                        body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                    });
+                                    if (res.ok) {
+                                        setSpecialFoodClosed(!specialFoodClosed);
+                                        alert(!specialFoodClosed ? 'Special Tokens CLOSED! 🛑' : 'Special Tokens OPENED! 🟢');
+                                    }
+                                } catch (err) { }
+                                setLoading(false);
+                            }}
+                            style={{
+                                padding: '4px 14px',
+                                borderRadius: '20px',
+                                fontSize: '0.73rem',
+                                fontWeight: 'bold',
+                                background: specialFoodClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                                color: specialFoodClosed ? '#ef4444' : '#22c55e',
+                                border: `1px solid ${specialFoodClosed ? '#ef444433' : '#22c55e33'}`,
+                                cursor: 'pointer'
+                            }}
+                        >
+                            {specialFoodClosed ? '🛑' : '🟢'} Special Tokens (click to toggle)
                         </span>
                     )}
                 </div>
