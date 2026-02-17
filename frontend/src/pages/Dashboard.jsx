@@ -1807,7 +1807,6 @@ const MessManagementModule = () => {
     const [specialFoodClosed, setSpecialFoodClosed] = React.useState(false);
     const [activeMenuSession, setActiveMenuSession] = React.useState('breakfast');
     const [activeDay, setActiveDay] = React.useState('monday');
-    const [activeWeeklySession, setActiveWeeklySession] = React.useState('breakfast');
     const [weeklyMenu, setWeeklyMenu] = React.useState({
         monday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
         tuesday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
@@ -1916,42 +1915,7 @@ const MessManagementModule = () => {
         setLoading(false);
     };
 
-    const handleUpdateRegularMenu = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                },
-                body: JSON.stringify({ regularMenu: { ...regularMenu, lastUpdated: new Date() } })
-            });
-            if (res.ok) {
-                setMenuPublished(true);
-            }
-        } catch (err) { }
-        setLoading(false);
-    };
 
-    const handleUpdateWeeklyMenu = async () => {
-        setLoading(true);
-        try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                },
-                body: JSON.stringify({ weeklyMenu })
-            });
-            if (res.ok) {
-                alert('Weekly Plan Saved Successfully! 📅');
-            }
-        } catch (err) { }
-        setLoading(false);
-    };
 
     const handleUpdateStructure = async (type) => {
         setLoading(true);
@@ -2170,12 +2134,47 @@ const MessManagementModule = () => {
                 </form>
             </div>
 
-            {/* Daily Regular Menu & Session Control - Merged */}
+            {/* Unified Menu Management & Session Control */}
             <div className="arena-card animate-slide-up">
-                <h3 className="section-title">Daily Regular Menu & Session Control</h3>
+                <h3 className="section-title">Menu Management & Session Control</h3>
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    Select a session tab, set its menu, and control availability for students.
+                    Select a day and session to plan the menu. "Publish" updates the Live Menu if today is selected.
                 </p>
+
+                {/* Day Selection Tabs */}
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                    {(() => {
+                        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                        const todayIndex = new Date().getDay();
+                        // Order days starting from today? Or just standard Mon-Sun? Let's do Mon-Sun for planning clarity.
+                        // Actually, user might prefer Today first. Let's stick to standard week but highlight Today.
+                        const orderedDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+
+                        return orderedDays.map(day => {
+                            const isToday = days[todayIndex] === day;
+                            return (
+                                <button
+                                    key={day}
+                                    onClick={() => setActiveDay(day)}
+                                    style={{
+                                        padding: '0.5rem 1rem',
+                                        borderRadius: '8px',
+                                        background: activeDay === day ? 'var(--accent-blue)' : isToday ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)',
+                                        color: activeDay === day ? 'white' : isToday ? '#22c55e' : 'var(--text-muted)',
+                                        border: isToday ? '1px solid rgba(34,197,94,0.2)' : 'none',
+                                        cursor: 'pointer',
+                                        fontSize: '0.8rem',
+                                        textTransform: 'capitalize',
+                                        transition: 'all 0.2s',
+                                        fontWeight: isToday ? 'bold' : 'normal'
+                                    }}
+                                >
+                                    {day.slice(0, 3)} {isToday && ' (Today)'}
+                                </button>
+                            );
+                        });
+                    })()}
+                </div>
 
                 {/* Session Tabs */}
                 <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
@@ -2183,6 +2182,10 @@ const MessManagementModule = () => {
                         const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
                         const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
                         const isActive = activeMenuSession === s;
+                        // Check if this session is closed (ONLY relevant if activeDay is Today)
+                        const isDayToday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay;
+                        const isClosed = isDayToday && regularMenu[s]?.isClosed;
+
                         return (
                             <button
                                 key={s}
@@ -2207,7 +2210,7 @@ const MessManagementModule = () => {
                                 }}
                             >
                                 {icons[s]} {s}
-                                {regularMenu[s].isClosed && (
+                                {isClosed && (
                                     <span style={{ fontSize: '0.55rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: '8px' }}>CLOSED</span>
                                 )}
                             </button>
@@ -2215,36 +2218,92 @@ const MessManagementModule = () => {
                     })}
                 </div>
 
-                {/* Menu Input for Active Session */}
-                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                {/* Menu Input */}
+                <form onSubmit={async (e) => {
+                    e.preventDefault();
+                    setLoading(true);
+
+                    const isToday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay;
+                    const sessionData = weeklyMenu[activeDay][activeMenuSession];
+
+                    try {
+                        // 1. Save to Weekly Menu
+                        const updatedWeekly = { ...weeklyMenu };
+                        // Ensure object exists
+                        if (!updatedWeekly[activeDay]) updatedWeekly[activeDay] = {};
+                        if (!updatedWeekly[activeDay][activeMenuSession]) updatedWeekly[activeDay][activeMenuSession] = {};
+
+                        // Inputs are bound to weeklyMenu state directly now? 
+                        // Wait, inputs below need to be bound to state. 
+                        // Let's bind inputs to weeklyMenu directly for simplicity, then this submit just pushes it.
+                        // Actually, duplicate state is bad. Let's assume on change we update weeklyMenu.
+
+                        await fetch('http://localhost:5000/api/student/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                            body: JSON.stringify({ weeklyMenu })
+                        });
+
+                        // 2. If Today, Update Regular Menu (Live)
+                        if (isToday) {
+                            const updatedRegular = {
+                                ...regularMenu,
+                                [activeMenuSession]: {
+                                    ...regularMenu[activeMenuSession],
+                                    mainDish: weeklyMenu[activeDay][activeMenuSession].mainDish,
+                                    sideDish: weeklyMenu[activeDay][activeMenuSession].sideDish
+                                },
+                                lastUpdated: new Date()
+                            };
+                            await fetch('http://localhost:5000/api/student/config', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                                body: JSON.stringify({ regularMenu: updatedRegular })
+                            });
+                            setRegularMenu(updatedRegular);
+                            setMenuPublished(true);
+                        }
+
+                        alert(isToday ? 'Menu Published & Saved to Weekly Plan! ✅' : 'Weekly Plan Updated! 💾');
+
+                    } catch (err) { }
+                    setLoading(false);
+                }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
                     <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                         <div>
-                            <label className="field-label">Main Dish</label>
+                            <label className="field-label">Main Dish ({activeDay})</label>
                             <input
                                 type="text"
                                 className="arena-input"
-                                value={regularMenu[activeMenuSession].mainDish}
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish || ''}
                                 onChange={e => {
-                                    setRegularMenu({
-                                        ...regularMenu,
-                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], mainDish: e.target.value }
+                                    setWeeklyMenu({
+                                        ...weeklyMenu,
+                                        [activeDay]: {
+                                            ...weeklyMenu[activeDay],
+                                            [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], mainDish: e.target.value }
+                                        }
                                     });
                                     setMenuPublished(false);
                                 }}
-                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Idly' : activeMenuSession === 'lunch' ? 'Rice' : 'Chappathi'}`}
+                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Idly' : 'Rice'}`}
                                 required
                             />
                         </div>
                         <div>
-                            <label className="field-label">Side Dish</label>
+                            <label className="field-label">Side Dish ({activeDay})</label>
                             <input
                                 type="text"
                                 className="arena-input"
-                                value={regularMenu[activeMenuSession].sideDish}
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.sideDish || ''}
                                 onChange={e => {
-                                    setRegularMenu({
-                                        ...regularMenu,
-                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], sideDish: e.target.value }
+                                    setWeeklyMenu({
+                                        ...weeklyMenu,
+                                        [activeDay]: {
+                                            ...weeklyMenu[activeDay],
+                                            [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], sideDish: e.target.value }
+                                        }
                                     });
                                     setMenuPublished(false);
                                 }}
@@ -2254,51 +2313,10 @@ const MessManagementModule = () => {
                         </div>
                     </div>
 
-                    {/* Close/Open Toggle + Publish */}
+                    {/* Actions */}
                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        <button
-                            type="button"
-                            onClick={async () => {
-                                setLoading(true);
-                                try {
-                                    const isClosing = !regularMenu[activeMenuSession].isClosed;
-                                    const updatedMenu = {
-                                        ...regularMenu,
-                                        [activeMenuSession]: {
-                                            ...regularMenu[activeMenuSession],
-                                            isClosed: isClosing,
-                                            ...(isClosing ? { mainDish: '', sideDish: '' } : {})
-                                        },
-                                        lastUpdated: new Date()
-                                    };
-                                    const res = await fetch('http://localhost:5000/api/student/config', {
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                                        },
-                                        body: JSON.stringify({ regularMenu: updatedMenu })
-                                    });
-                                    if (res.ok) {
-                                        setRegularMenu(updatedMenu);
-                                        const label = activeMenuSession.charAt(0).toUpperCase() + activeMenuSession.slice(1);
-                                        alert(updatedMenu[activeMenuSession].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
-                                    }
-                                } catch (err) { }
-                                setLoading(false);
-                            }}
-                            className="arena-btn"
-                            style={{
-                                padding: '0.7rem 1.2rem',
-                                fontSize: '0.8rem',
-                                background: regularMenu[activeMenuSession].isClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                color: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444',
-                                borderColor: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444'
-                            }}
-                            disabled={loading}
-                        >
-                            {regularMenu[activeMenuSession].isClosed ? '🟢 Open Session' : '🛑 Close Session'}
-                        </button>
+
+                        {/* Publish Button */}
                         <button
                             type="submit"
                             className="arena-btn"
@@ -2310,41 +2328,75 @@ const MessManagementModule = () => {
                             }}
                             disabled={loading}
                         >
-                            {menuPublished ? '✅ Published' : '🍙 Publish All Menus'}
+                            {menuPublished ? '✅ Published' : '🍙 Publish Menu'}
                         </button>
 
-                        <button
-                            type="button"
-                            onClick={() => {
-                                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                                const todayName = days[new Date().getDay()];
-                                const todayPlan = weeklyMenu[todayName];
-                                if (todayPlan) {
-                                    setRegularMenu({
-                                        ...regularMenu,
-                                        breakfast: { ...regularMenu.breakfast, mainDish: todayPlan.breakfast.mainDish, sideDish: todayPlan.breakfast.sideDish },
-                                        lunch: { ...regularMenu.lunch, mainDish: todayPlan.lunch.mainDish, sideDish: todayPlan.lunch.sideDish },
-                                        dinner: { ...regularMenu.dinner, mainDish: todayPlan.dinner.mainDish, sideDish: todayPlan.dinner.sideDish }
-                                    });
-                                    setMenuPublished(false);
-                                    alert(`Loaded planned menu for ${todayName.toUpperCase()}! 📅`);
-                                }
-                            }}
-                            className="arena-btn"
-                            style={{
-                                padding: '0.7rem 1.5rem',
-                                background: 'rgba(59,130,246,0.1)',
-                                color: 'var(--accent-blue)',
-                                borderColor: 'rgba(59,130,246,0.2)'
-                            }}
-                            disabled={loading}
-                        >
-                            📅 Load Today's Plan
-                        </button>
+                        {/* Close Session (Only visible if Today) */}
+                        {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay && (
+                            <button
+                                type="button"
+                                onClick={async () => {
+                                    setLoading(true);
+                                    try {
+                                        const isClosing = !regularMenu[activeMenuSession].isClosed;
+                                        // If closing, clear the LIVE regular menu, but NOT the weekly plan?
+                                        // User said "close the session". Usually means live session.
+                                        // Clearing fields in regularMenu is consistent with previous logic.
+
+                                        const updatedMenu = {
+                                            ...regularMenu,
+                                            [activeMenuSession]: {
+                                                ...regularMenu[activeMenuSession],
+                                                isClosed: isClosing,
+                                                ...(isClosing ? { mainDish: '', sideDish: '' } : {})
+                                            },
+                                            lastUpdated: new Date()
+                                        };
+
+                                        // We also might want to clear the inputs if they are bound to weeklyMenu?
+                                        // No, "Close" is a temporary daily operation. Weekly plan should remain.
+                                        // But if we clear mainDish/sideDish in regularMenu, the inputs (bound to weeklyMenu) will still show values.
+                                        // This implies separation of concerns.
+                                        // If user Closes session, the inputs shoud ideally reflect that?
+                                        // But inputs are bound to `weeklyMenu`.
+                                        // If I close the session, it means "Today's session is closed".
+                                        // The Weekly Plan for "Monday" (Today) remains "Idly/Sambar".
+
+                                        // Implementation Choice:
+                                        // "Close Session" affects ONLY the Live Status.
+                                        // The inputs will still show the planned menu.
+                                        // This is correct because "Weekly Plan" is the master. "Close" is an override.
+
+                                        await fetch('http://localhost:5000/api/student/config', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                                            body: JSON.stringify({ regularMenu: updatedMenu })
+                                        });
+
+                                        setRegularMenu(updatedMenu);
+                                        const label = activeMenuSession.charAt(0).toUpperCase() + activeMenuSession.slice(1);
+                                        alert(updatedMenu[activeMenuSession].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
+
+                                    } catch (err) { }
+                                    setLoading(false);
+                                }}
+                                className="arena-btn"
+                                style={{
+                                    padding: '0.7rem 1.2rem',
+                                    fontSize: '0.8rem',
+                                    background: regularMenu[activeMenuSession].isClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                                    color: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444',
+                                    borderColor: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444'
+                                }}
+                                disabled={loading}
+                            >
+                                {regularMenu[activeMenuSession].isClosed ? '🟢 Open Session' : '🛑 Close Session'}
+                            </button>
+                        )}
                     </div>
                 </form>
 
-                {/* Status Badges */}
+                {/* Status Badges (Always visible for context) */}
                 <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
                     {['breakfast', 'lunch', 'dinner'].map(s => (
                         <span key={s} style={{
@@ -2357,6 +2409,7 @@ const MessManagementModule = () => {
                             border: `1px solid ${regularMenu[s].isClosed ? '#ef444433' : '#22c55e33'}`,
                             textTransform: 'capitalize'
                         }}>
+                            {/* Only show Closed status if it's the current day? Or always live status? Always live status is safer info. */}
                             {regularMenu[s].isClosed ? '🛑' : '🟢'} {s}
                         </span>
                     ))}
@@ -2394,117 +2447,6 @@ const MessManagementModule = () => {
                             {specialFoodClosed ? '🛑' : '🟢'} Special Tokens (click to toggle)
                         </span>
                     )}
-                </div>
-            </div>
-
-            {/* Weekly Master Menu Management */}
-            <div className="arena-card animate-slide-up">
-                <h3 className="section-title">📅 Weekly Master Menu Plan</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    Set the default menu for each day of the week. You can load this into the daily menu with one click.
-                </p>
-
-                {/* Day Selection Tabs */}
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                    {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
-                        <button
-                            key={day}
-                            onClick={() => setActiveDay(day)}
-                            style={{
-                                padding: '0.5rem 1rem',
-                                borderRadius: '8px',
-                                background: activeDay === day ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
-                                color: activeDay === day ? 'white' : 'var(--text-muted)',
-                                border: 'none',
-                                cursor: 'pointer',
-                                fontSize: '0.8rem',
-                                textTransform: 'capitalize',
-                                transition: 'all 0.2s'
-                            }}
-                        >
-                            {day.slice(0, 3)}
-                        </button>
-                    ))}
-                </div>
-
-                {/* Session Selection for Weekly Plan */}
-                <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
-                    {['breakfast', 'lunch', 'dinner'].map(s => {
-                        const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
-                        const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
-                        const isActive = activeWeeklySession === s;
-                        return (
-                            <button
-                                key={s}
-                                type="button"
-                                onClick={() => setActiveWeeklySession(s)}
-                                style={{
-                                    flex: 1,
-                                    padding: '0.8rem 1rem',
-                                    background: isActive ? `${colors[s]}22` : 'rgba(255,255,255,0.02)',
-                                    border: 'none',
-                                    borderBottom: isActive ? `3px solid ${colors[s]}` : '3px solid transparent',
-                                    color: isActive ? colors[s] : 'var(--text-muted)',
-                                    fontWeight: isActive ? 'bold' : 'normal',
-                                    fontSize: '0.85rem',
-                                    cursor: 'pointer',
-                                    textTransform: 'capitalize',
-                                    transition: 'all 0.2s ease',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '6px'
-                                }}
-                            >
-                                {icons[s]} {s}
-                            </button>
-                        );
-                    })}
-                </div>
-
-                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
-                    <div>
-                        <label className="field-label">Planned Main Dish</label>
-                        <input
-                            type="text"
-                            className="arena-input"
-                            value={weeklyMenu[activeDay][activeWeeklySession].mainDish}
-                            onChange={e => {
-                                setWeeklyMenu({
-                                    ...weeklyMenu,
-                                    [activeDay]: {
-                                        ...weeklyMenu[activeDay],
-                                        [activeWeeklySession]: { ...weeklyMenu[activeDay][activeWeeklySession], mainDish: e.target.value }
-                                    }
-                                });
-                            }}
-                            placeholder="Set main dish..."
-                        />
-                    </div>
-                    <div>
-                        <label className="field-label">Planned Side Dish</label>
-                        <input
-                            type="text"
-                            className="arena-input"
-                            value={weeklyMenu[activeDay][activeWeeklySession].sideDish}
-                            onChange={e => {
-                                setWeeklyMenu({
-                                    ...weeklyMenu,
-                                    [activeDay]: {
-                                        ...weeklyMenu[activeDay],
-                                        [activeWeeklySession]: { ...weeklyMenu[activeDay][activeWeeklySession], sideDish: e.target.value }
-                                    }
-                                });
-                            }}
-                            placeholder="Set side dish..."
-                        />
-                    </div>
-                </div>
-
-                <div style={{ display: 'flex', gap: '1rem' }}>
-                    <button onClick={handleUpdateWeeklyMenu} className="arena-btn" style={{ padding: '0.7rem 1.5rem' }}>
-                        💾 Save to Weekly Plan
-                    </button>
                 </div>
             </div>
 
