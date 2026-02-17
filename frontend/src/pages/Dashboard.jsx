@@ -1610,78 +1610,19 @@ const StudentMessModule = ({ studentId }) => {
                     <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated: {config?.regularMenu?.lastUpdated ? formatDateIST(config.regularMenu.lastUpdated) : 'Recently'}</span>
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-                    {['breakfast', 'lunch', 'dinner'].map((session) => (
-                        <div key={session} style={{
-                            padding: '1.2rem',
-                            background: 'rgba(255,255,255,0.03)',
-                            borderRadius: '16px',
-                            border: '1px solid rgba(255,255,255,0.08)',
-                            position: 'relative',
-                            overflow: 'hidden'
-                        }}>
-                            <div style={{
-                                position: 'absolute',
-                                top: 0,
-                                left: 0,
-                                width: '4px',
-                                height: '100%',
-                                background: session === 'breakfast' ? '#fbbf24' : session === 'lunch' ? '#3b82f6' : '#a855f7'
-                            }} />
-                            <h5 style={{
-                                textTransform: 'capitalize',
-                                fontSize: '0.8rem',
-                                color: 'var(--text-muted)',
-                                marginBottom: '1rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '6px'
-                            }}>
-                                {session === 'breakfast' ? '🍳' : session === 'lunch' ? '🍛' : '🍱'} {session}
-                            </h5>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem', opacity: config?.regularMenu?.[session]?.isClosed ? 0.3 : 1 }}>
-                                <div>
-                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Main Dish</p>
-                                    <p style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-main)' }}>
-                                        {config?.regularMenu?.[session]?.mainDish || '---'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Side Dish</p>
-                                    <p style={{ fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
-                                        {config?.regularMenu?.[session]?.sideDish || '---'}
-                                    </p>
-                                </div>
-                            </div>
-                            {config?.regularMenu?.[session]?.isClosed && (
-                                <div style={{
-                                    position: 'absolute',
-                                    top: 0,
-                                    left: 0,
-                                    width: '100%',
-                                    height: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    background: 'rgba(0,0,0,0.4)',
-                                    backdropFilter: 'blur(2px)',
-                                    zIndex: 2
-                                }}>
-                                    <span style={{
-                                        color: '#ef4444',
-                                        fontWeight: 'bold',
-                                        fontSize: '0.8rem',
-                                        background: 'rgba(0,0,0,0.8)',
-                                        padding: '4px 12px',
-                                        borderRadius: '20px',
-                                        border: '1px solid #ef444444'
-                                    }}>
-                                        🛑 Session Closed
-                                    </span>
-                                </div>
-                            )}
-                        </div>
-                    ))}
+                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
+                        <p style={{ fontWeight: '700', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                            {config?.regularMenu?.breakfast?.mainDish || '---'}
+                        </p>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '120px' }}>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Side Dish</p>
+                        <p style={{ fontWeight: '500', fontSize: '1rem', color: 'var(--text-muted)' }}>
+                            {config?.regularMenu?.breakfast?.sideDish || '---'}
+                        </p>
+                    </div>
                 </div>
             </div>
 
