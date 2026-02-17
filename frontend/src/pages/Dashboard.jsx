@@ -1726,6 +1726,7 @@ const MessManagementModule = () => {
         specialFoodSession: 'None'
     });
     const [regularMenu, setRegularMenu] = React.useState({ mainDish: '', sideDish: '' });
+    const [menuPublished, setMenuPublished] = React.useState(false);
     const [masterList, setMasterList] = React.useState([]);
     const [newFoodItem, setNewFoodItem] = React.useState('');
 
@@ -1832,7 +1833,9 @@ const MessManagementModule = () => {
                 },
                 body: JSON.stringify({ regularMenu: { ...regularMenu, lastUpdated: new Date() } })
             });
-            if (res.ok) alert('Daily Regular Menu Updated! 🍚');
+            if (res.ok) {
+                setMenuPublished(true);
+            }
         } catch (err) { }
         setLoading(false);
     };
@@ -2068,7 +2071,10 @@ const MessManagementModule = () => {
                                 type="text"
                                 className="arena-input"
                                 value={regularMenu.mainDish}
-                                onChange={e => setRegularMenu({ ...regularMenu, mainDish: e.target.value })}
+                                onChange={e => {
+                                    setRegularMenu({ ...regularMenu, mainDish: e.target.value });
+                                    setMenuPublished(false);
+                                }}
                                 placeholder="e.g. Sambar Rice"
                                 required
                             />
@@ -2079,14 +2085,28 @@ const MessManagementModule = () => {
                                 type="text"
                                 className="arena-input"
                                 value={regularMenu.sideDish}
-                                onChange={e => setRegularMenu({ ...regularMenu, sideDish: e.target.value })}
+                                onChange={e => {
+                                    setRegularMenu({ ...regularMenu, sideDish: e.target.value });
+                                    setMenuPublished(false);
+                                }}
                                 placeholder="e.g. Potato Fry"
                                 required
                             />
                         </div>
                     </div>
-                    <button type="submit" className="arena-btn" style={{ width: 'fit-content', padding: '0.8rem 2rem' }}>
-                        🍙 Publish Regular Menu
+                    <button
+                        type="submit"
+                        className="arena-btn"
+                        style={{
+                            width: 'fit-content',
+                            padding: '0.8rem 2rem',
+                            background: menuPublished ? 'rgba(34,197,94,0.2)' : '',
+                            color: menuPublished ? '#22c55e' : '',
+                            borderColor: menuPublished ? 'rgba(34,197,94,0.3)' : ''
+                        }}
+                        disabled={loading}
+                    >
+                        {menuPublished ? '✅ Published Regular Menu' : '🍙 Publish Regular Menu'}
                     </button>
                 </form>
             </div>
