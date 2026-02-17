@@ -86,8 +86,18 @@ const systemConfigSchema = new mongoose.Schema({
         default: []
     },
     regularMenu: {
-        mainDish: { type: String, default: '' },
-        sideDish: { type: String, default: '' },
+        breakfast: {
+            mainDish: { type: String, default: '' },
+            sideDish: { type: String, default: '' }
+        },
+        lunch: {
+            mainDish: { type: String, default: '' },
+            sideDish: { type: String, default: '' }
+        },
+        dinner: {
+            mainDish: { type: String, default: '' },
+            sideDish: { type: String, default: '' }
+        },
         lastUpdated: { type: Date, default: Date.now }
     },
     updatedAt: {

@@ -1609,15 +1609,51 @@ const StudentMessModule = ({ studentId }) => {
                     <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated: {config?.regularMenu?.lastUpdated ? formatDateIST(config.regularMenu.lastUpdated) : 'Recently'}</span>
                 </div>
-                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
-                        <p style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{config?.regularMenu?.mainDish || 'Pending...'}</p>
-                    </div>
-                    <div style={{ padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)' }}>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Side Dish</p>
-                        <p style={{ fontWeight: 'bold', fontSize: '1.1rem' }}>{config?.regularMenu?.sideDish || 'Pending...'}</p>
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
+                    {['breakfast', 'lunch', 'dinner'].map((session) => (
+                        <div key={session} style={{
+                            padding: '1.2rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            borderRadius: '16px',
+                            border: '1px solid rgba(255,255,255,0.08)',
+                            position: 'relative',
+                            overflow: 'hidden'
+                        }}>
+                            <div style={{
+                                position: 'absolute',
+                                top: 0,
+                                left: 0,
+                                width: '4px',
+                                height: '100%',
+                                background: session === 'breakfast' ? '#fbbf24' : session === 'lunch' ? '#3b82f6' : '#a855f7'
+                            }} />
+                            <h5 style={{
+                                textTransform: 'capitalize',
+                                fontSize: '0.8rem',
+                                color: 'var(--text-muted)',
+                                marginBottom: '1rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '6px'
+                            }}>
+                                {session === 'breakfast' ? '🍳' : session === 'lunch' ? '🍛' : '🍱'} {session}
+                            </h5>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.8rem' }}>
+                                <div>
+                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Main Dish</p>
+                                    <p style={{ fontWeight: '700', fontSize: '1rem', color: 'var(--text-main)' }}>
+                                        {config?.regularMenu?.[session]?.mainDish || '---'}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '2px' }}>Side Dish</p>
+                                    <p style={{ fontWeight: '500', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+                                        {config?.regularMenu?.[session]?.sideDish || '---'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
 
@@ -1725,7 +1761,11 @@ const MessManagementModule = () => {
         specialFoodEndTime: '10:00',
         specialFoodSession: 'None'
     });
-    const [regularMenu, setRegularMenu] = React.useState({ mainDish: '', sideDish: '' });
+    const [regularMenu, setRegularMenu] = React.useState({
+        breakfast: { mainDish: '', sideDish: '' },
+        lunch: { mainDish: '', sideDish: '' },
+        dinner: { mainDish: '', sideDish: '' }
+    });
     const [menuPublished, setMenuPublished] = React.useState(false);
     const [masterList, setMasterList] = React.useState([]);
     const [newFoodItem, setNewFoodItem] = React.useState('');
@@ -1758,8 +1798,9 @@ const MessManagementModule = () => {
             }
             if (data?.regularMenu) {
                 setRegularMenu({
-                    mainDish: data.regularMenu.mainDish || '',
-                    sideDish: data.regularMenu.sideDish || ''
+                    breakfast: data.regularMenu.breakfast || { mainDish: '', sideDish: '' },
+                    lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '' },
+                    dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '' }
                 });
             }
             if (data?.specialFoodMasterList) {
@@ -2063,37 +2104,63 @@ const MessManagementModule = () => {
                 <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
                     Set the regular main and side dishes for the current day. Students will see this in their Mess tab.
                 </p>
-                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <div>
-                            <label className="field-label">Main Dish</label>
-                            <input
-                                type="text"
-                                className="arena-input"
-                                value={regularMenu.mainDish}
-                                onChange={e => {
-                                    setRegularMenu({ ...regularMenu, mainDish: e.target.value });
-                                    setMenuPublished(false);
-                                }}
-                                placeholder="e.g. Sambar Rice"
-                                required
-                            />
+                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                    {['breakfast', 'lunch', 'dinner'].map((session) => (
+                        <div key={session} style={{
+                            padding: '1.5rem',
+                            background: 'rgba(255,255,255,0.02)',
+                            borderRadius: '12px',
+                            border: '1px solid rgba(255,255,255,0.05)'
+                        }}>
+                            <h4 style={{
+                                fontSize: '0.9rem',
+                                marginBottom: '1rem',
+                                color: 'var(--accent-blue)',
+                                textTransform: 'capitalize',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '8px'
+                            }}>
+                                {session === 'breakfast' ? '🍳' : session === 'lunch' ? '🍛' : '🍱'} {session} Menu
+                            </h4>
+                            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                <div>
+                                    <label className="field-label">Main Dish</label>
+                                    <input
+                                        type="text"
+                                        className="arena-input"
+                                        value={regularMenu[session].mainDish}
+                                        onChange={e => {
+                                            setRegularMenu({
+                                                ...regularMenu,
+                                                [session]: { ...regularMenu[session], mainDish: e.target.value }
+                                            });
+                                            setMenuPublished(false);
+                                        }}
+                                        placeholder={`e.g. ${session === 'breakfast' ? 'Idly' : session === 'lunch' ? 'Rice' : 'Chappathi'}`}
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="field-label">Side Dish</label>
+                                    <input
+                                        type="text"
+                                        className="arena-input"
+                                        value={regularMenu[session].sideDish}
+                                        onChange={e => {
+                                            setRegularMenu({
+                                                ...regularMenu,
+                                                [session]: { ...regularMenu[session], sideDish: e.target.value }
+                                            });
+                                            setMenuPublished(false);
+                                        }}
+                                        placeholder={`e.g. ${session === 'breakfast' ? 'Sambar' : 'Curry'}`}
+                                        required
+                                    />
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <label className="field-label">Side Dish</label>
-                            <input
-                                type="text"
-                                className="arena-input"
-                                value={regularMenu.sideDish}
-                                onChange={e => {
-                                    setRegularMenu({ ...regularMenu, sideDish: e.target.value });
-                                    setMenuPublished(false);
-                                }}
-                                placeholder="e.g. Potato Fry"
-                                required
-                            />
-                        </div>
-                    </div>
+                    ))}
                     <button
                         type="submit"
                         className="arena-btn"
