@@ -1599,32 +1599,76 @@ const StudentMessModule = ({ studentId }) => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {/* Daily Regular Menu Section */}
-            <div className="arena-card animate-slide-up" style={{
-                background: 'rgba(59,130,246,0.05)',
-                border: '1px solid rgba(59,130,246,0.1)',
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '1rem'
-            }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
-                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated: {config?.regularMenu?.lastUpdated ? formatDateIST(config.regularMenu.lastUpdated) : 'Recently'}</span>
-                </div>
-                <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
-                    <div style={{ flex: 1, minWidth: '120px' }}>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
-                        <p style={{ fontWeight: '700', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                            {config?.regularMenu?.breakfast?.mainDish || '---'}
-                        </p>
+            {(() => {
+                const sessions = ['breakfast', 'lunch', 'dinner'];
+                const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
+                const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+                const activeSession = sessions.find(s => !config?.regularMenu?.[s]?.isClosed) || sessions[0];
+                const menu = config?.regularMenu?.[activeSession];
+                return (
+                    <div className="arena-card animate-slide-up" style={{
+                        background: 'rgba(59,130,246,0.05)',
+                        border: '1px solid rgba(59,130,246,0.1)',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '1rem'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Updated: {config?.regularMenu?.lastUpdated ? formatDateIST(config.regularMenu.lastUpdated) : 'Recently'}</span>
+                        </div>
+
+                        {/* Session badges */}
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                            {sessions.map(s => (
+                                <span key={s} style={{
+                                    padding: '3px 12px',
+                                    borderRadius: '16px',
+                                    fontSize: '0.72rem',
+                                    fontWeight: activeSession === s ? 'bold' : 'normal',
+                                    background: config?.regularMenu?.[s]?.isClosed
+                                        ? 'rgba(239,68,68,0.1)'
+                                        : activeSession === s ? `${colors[s]}22` : 'rgba(255,255,255,0.05)',
+                                    color: config?.regularMenu?.[s]?.isClosed
+                                        ? '#ef4444'
+                                        : activeSession === s ? colors[s] : 'var(--text-muted)',
+                                    border: `1px solid ${config?.regularMenu?.[s]?.isClosed ? '#ef444433' : activeSession === s ? `${colors[s]}44` : 'rgba(255,255,255,0.08)'}`,
+                                    textTransform: 'capitalize'
+                                }}>
+                                    {config?.regularMenu?.[s]?.isClosed ? '🛑' : icons[s]} {s}
+                                </span>
+                            ))}
+                        </div>
+
+                        {/* Active session menu */}
+                        <div style={{
+                            padding: '1.2rem',
+                            background: 'rgba(255,255,255,0.03)',
+                            borderRadius: '12px',
+                            border: `1px solid ${colors[activeSession]}33`,
+                            borderLeft: `4px solid ${colors[activeSession]}`
+                        }}>
+                            <p style={{ fontSize: '0.7rem', color: colors[activeSession], fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.8rem', letterSpacing: '0.5px' }}>
+                                {icons[activeSession]} {activeSession} — Now Serving
+                            </p>
+                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                                <div style={{ flex: 1, minWidth: '120px' }}>
+                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
+                                    <p style={{ fontWeight: '700', fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                                        {menu?.mainDish || '---'}
+                                    </p>
+                                </div>
+                                <div style={{ flex: 1, minWidth: '120px' }}>
+                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Side Dish</p>
+                                    <p style={{ fontWeight: '500', fontSize: '1rem', color: 'var(--text-muted)' }}>
+                                        {menu?.sideDish || '---'}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div style={{ flex: 1, minWidth: '120px' }}>
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Side Dish</p>
-                        <p style={{ fontWeight: '500', fontSize: '1rem', color: 'var(--text-muted)' }}>
-                            {config?.regularMenu?.breakfast?.sideDish || '---'}
-                        </p>
-                    </div>
-                </div>
-            </div>
+                );
+            })()}
 
             <div className="arena-card" style={{
                 background: isRegistrationOpen() ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)',
