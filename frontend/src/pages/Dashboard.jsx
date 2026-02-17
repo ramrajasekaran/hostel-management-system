@@ -2190,14 +2190,6 @@ const MessManagementModule = () => {
                                 <button type="submit" className="arena-btn" style={{ flex: 1 }} disabled={loading}>
                                     {loading ? 'Propagating Logic...' : '📅 Set Special Food Window'}
                                 </button>
-                                <button
-                                    type="button"
-                                    onClick={() => handleUpdateStructure('Common')}
-                                    className="arena-btn btn-secondary"
-                                    title="Quick switch to Fixed Monthly"
-                                >
-                                    🔄 Change to Fixed Method
-                                </button>
                             </div>
                         </form>
                     </div>
