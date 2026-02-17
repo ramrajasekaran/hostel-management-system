@@ -1907,32 +1907,60 @@ const MessManagementModule = () => {
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {/* Mode Selector & Status */}
-            <div className="arena-card">
-                <h3 className="section-title">Mess Operating Mode</h3>
-                <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
+            {/* Mess Method Status & Toggle */}
+            <div className="arena-card animate-slide-up" style={{
+                border: '1px solid rgba(255,255,255,0.05)',
+                background: config.feeStructureType === 'Common' ? 'rgba(34,197,94,0.02)' : 'rgba(59,130,246,0.02)',
+                position: 'relative',
+                overflow: 'hidden'
+            }}>
+                <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    right: 0,
+                    width: '150px',
+                    height: '150px',
+                    background: config.feeStructureType === 'Common' ? 'radial-gradient(circle, rgba(34,197,94,0.1) 0%, transparent 70%)' : 'radial-gradient(circle, rgba(59,130,246,0.1) 0%, transparent 70%)',
+                    zIndex: 0
+                }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '2rem', position: 'relative', zIndex: 1, flexWrap: 'wrap', gap: '1rem' }}>
+                    <div>
+                        <h3 className="section-title" style={{ marginBottom: '4px' }}>Mess Operating Mode</h3>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                            Currently: <span style={{ color: config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6', fontWeight: 'bold' }}>
+                                {config.feeStructureType === 'Common' ? 'Fixed Monthly Fee (Common)' : 'Token Registration (Separate)'}
+                            </span>
+                        </p>
+                    </div>
                     <button
-                        onClick={() => handleUpdateStructure('Common')}
-                        className={`arena-btn ${config.feeStructureType === 'Common' ? '' : 'btn-secondary'}`}
-                        style={{ flex: 1, border: config.feeStructureType === 'Common' ? '2px solid #22c55e' : '' }}
+                        onClick={() => {
+                            if (window.confirm(`Are you sure you want to switch to the ${config.feeStructureType === 'Common' ? 'Separate (Token)' : 'Common (Fixed)'} method? This will change how student fees are calculated.`)) {
+                                handleUpdateStructure(config.feeStructureType === 'Common' ? 'Separate' : 'Common');
+                            }
+                        }}
+                        className="arena-btn"
+                        style={{
+                            width: 'fit-content',
+                            background: 'var(--grad-premium)',
+                            border: 'none',
+                            padding: '0.8rem 1.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '8px'
+                        }}
                     >
-                        {config.feeStructureType === 'Common' && '✅ '}Common (Fixed)
-                    </button>
-                    <button
-                        onClick={() => handleUpdateStructure('Separate')}
-                        className={`arena-btn ${config.feeStructureType === 'Separate' ? '' : 'btn-secondary'}`}
-                        style={{ flex: 1, border: config.feeStructureType === 'Separate' ? '2px solid #3b82f6' : '' }}
-                    >
-                        {config.feeStructureType === 'Separate' && '✅ '}Separate (Token)
+                        🔄 Change Method
                     </button>
                 </div>
 
-                <div className="profile-grid" style={{ background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', border: '1px solid var(--border-main)' }}>
-                    <ProfileItem label="Active System" value={config.feeStructureType === 'Common' ? '📍 FIXED MONTHLY METHOD' : '🎫 DYNAMIC TOKEN METHOD'} valueColor={config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6'} />
-                    <ProfileItem label="Hostel Rent (Fixed)" value={`₹${config.hostelFee}`} />
+                <div className="profile-grid" style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '12px', position: 'relative', zIndex: 1 }}>
+                    <ProfileItem label="Method" value={config.feeStructureType === 'Common' ? '🍚 COMMON / FIXED' : '🎫 SEPARATE / TOKEN'} valueColor={config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6'} />
+                    <ProfileItem label="Hostel Rent" value={`₹${config.hostelFee}`} />
                     {config.feeStructureType === 'Common' ? (
-                        <ProfileItem label="Monthly Mess Bill" value={`₹${config.fixedMessFee}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Fixed Mess Bill" value={`₹${config.fixedMessFee}`} valueColor="#fbbf24" />
                     ) : (
-                        <ProfileItem label="Base Mess Utility" value={`₹${config.commonFoodFee}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Mess Utility (Base)" value={`₹${config.commonFoodFee}`} valueColor="#fbbf24" />
                     )}
                 </div>
             </div>
@@ -1978,19 +2006,8 @@ const MessManagementModule = () => {
                     </div>
                     <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                         <button type="submit" className="arena-btn" style={{ width: 'fit-content', padding: '0.8rem 2rem' }}>
-                            💾 Save Pricing Logic
+                            💾 Save Pricing Constants
                         </button>
-                        {config.feeStructureType === 'Common' && (
-                            <button
-                                type="button"
-                                onClick={() => handleUpdateStructure('Separate')}
-                                className="arena-btn btn-secondary"
-                                style={{ width: 'fit-content', padding: '0.8rem 2rem', borderColor: '#3b82f6', color: '#3b82f6' }}
-                                title="Switch to Token-based System"
-                            >
-                                🎫 Change to Separate (Token) Method
-                            </button>
-                        )}
                     </div>
                 </form>
             </div>
