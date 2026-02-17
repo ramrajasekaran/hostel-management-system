@@ -2012,6 +2012,43 @@ const MessManagementModule = () => {
                 </form>
             </div>
 
+            {/* Daily Regular Menu Management - Always Visible */}
+            <div className="arena-card animate-slide-up">
+                <h3 className="section-title">Daily Regular Menu Management</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    Set the regular main and side dishes for the current day. Students will see this in their Mess tab.
+                </p>
+                <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                        <div>
+                            <label className="field-label">Main Dish</label>
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={regularMenu.mainDish}
+                                onChange={e => setRegularMenu({ ...regularMenu, mainDish: e.target.value })}
+                                placeholder="e.g. Sambar Rice"
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label className="field-label">Side Dish</label>
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={regularMenu.sideDish}
+                                onChange={e => setRegularMenu({ ...regularMenu, sideDish: e.target.value })}
+                                placeholder="e.g. Potato Fry"
+                                required
+                            />
+                        </div>
+                    </div>
+                    <button type="submit" className="arena-btn" style={{ width: 'fit-content', padding: '0.8rem 2rem' }}>
+                        🍙 Publish Regular Menu
+                    </button>
+                </form>
+            </div>
+
             {/* SEPARATE MODE ONLY: Scheduling & Tokens */}
             {config.feeStructureType === 'Separate' && (
                 <>
@@ -2052,43 +2089,6 @@ const MessManagementModule = () => {
                                 </div>
                             ))}
                         </div>
-                    </div>
-
-                    {/* Regular Menu Management */}
-                    <div className="arena-card animate-slide-up">
-                        <h3 className="section-title">Daily Regular Menu Management</h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                            Set the regular main and side dishes for the current day.
-                        </p>
-                        <form onSubmit={handleUpdateRegularMenu} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                <div>
-                                    <label className="field-label">Main Dish</label>
-                                    <input
-                                        type="text"
-                                        className="arena-input"
-                                        value={regularMenu.mainDish}
-                                        onChange={e => setRegularMenu({ ...regularMenu, mainDish: e.target.value })}
-                                        placeholder="e.g. Sambar Rice"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="field-label">Side Dish</label>
-                                    <input
-                                        type="text"
-                                        className="arena-input"
-                                        value={regularMenu.sideDish}
-                                        onChange={e => setRegularMenu({ ...regularMenu, sideDish: e.target.value })}
-                                        placeholder="e.g. Potato Fry"
-                                        required
-                                    />
-                                </div>
-                            </div>
-                            <button type="submit" className="arena-btn" style={{ width: 'fit-content', padding: '0.8rem 2rem' }}>
-                                🍙 Publish Regular Menu
-                            </button>
-                        </form>
                     </div>
 
                     <div className="arena-card animate-slide-up">
