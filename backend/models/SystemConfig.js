@@ -103,6 +103,43 @@ const systemConfigSchema = new mongoose.Schema({
         },
         lastUpdated: { type: Date, default: Date.now }
     },
+    weeklyMenu: {
+        monday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        tuesday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        wednesday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        thursday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        friday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        saturday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        },
+        sunday: {
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+        }
+    },
     specialFoodClosed: {
         type: Boolean,
         default: false

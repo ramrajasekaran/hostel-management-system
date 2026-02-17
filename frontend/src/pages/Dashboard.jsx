@@ -1604,11 +1604,26 @@ const StudentMessModule = ({ studentId }) => {
             {/* Daily Regular Menu Section */}
             {(() => {
                 const sessions = ['breakfast', 'lunch', 'dinner'];
+                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
                 const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
                 const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+
+                const todayName = days[new Date().getDay()];
                 const activeSession = sessions.find(s => !config?.regularMenu?.[s]?.isClosed);
-                const menu = activeSession ? config?.regularMenu?.[activeSession] : null;
+
+                // Get menu from daily regularMenu, or fallback to weeklyMenu if daily is empty
+                let menu = activeSession ? config?.regularMenu?.[activeSession] : null;
+                let isPlanned = false;
+
+                if (activeSession && (!menu?.mainDish || menu.mainDish.trim() === '')) {
+                    if (config?.weeklyMenu?.[todayName]?.[activeSession]) {
+                        menu = config.weeklyMenu[todayName][activeSession];
+                        isPlanned = true;
+                    }
+                }
+
                 const hasMenu = menu?.mainDish && menu.mainDish.trim() !== '';
+
                 return (
                     <div className="arena-card animate-slide-up" style={{
                         background: 'rgba(59,130,246,0.05)',
@@ -1618,7 +1633,12 @@ const StudentMessModule = ({ studentId }) => {
                         gap: '1rem'
                     }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
+                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
+                                    {todayName}, {new Date().toLocaleDateString()}
+                                </span>
+                            </div>
                             {activeSession && (
                                 <span style={{
                                     padding: '3px 12px',
@@ -1635,7 +1655,21 @@ const StudentMessModule = ({ studentId }) => {
                             )}
                         </div>
                         {activeSession && hasMenu ? (
-                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', position: 'relative' }}>
+                                {isPlanned && (
+                                    <span style={{
+                                        position: 'absolute',
+                                        top: '-15px',
+                                        right: '0',
+                                        fontSize: '0.55rem',
+                                        color: 'var(--text-muted)',
+                                        background: 'rgba(255,255,255,0.03)',
+                                        padding: '2px 8px',
+                                        borderRadius: '4px'
+                                    }}>
+                                        📅 Planned Menu
+                                    </span>
+                                )}
                                 <div style={{ flex: 1, minWidth: '120px' }}>
                                     <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
                                     <p style={{ fontWeight: '700', fontSize: '1.1rem', color: 'var(--text-main)' }}>
@@ -1772,6 +1806,17 @@ const MessManagementModule = () => {
     const [newFoodItem, setNewFoodItem] = React.useState('');
     const [specialFoodClosed, setSpecialFoodClosed] = React.useState(false);
     const [activeMenuSession, setActiveMenuSession] = React.useState('breakfast');
+    const [activeDay, setActiveDay] = React.useState('monday');
+    const [activeWeeklySession, setActiveWeeklySession] = React.useState('breakfast');
+    const [weeklyMenu, setWeeklyMenu] = React.useState({
+        monday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        tuesday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        wednesday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        thursday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        friday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        saturday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
+        sunday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } }
+    });
 
     const fetchConfig = React.useCallback(async () => {
         try {
@@ -1808,6 +1853,9 @@ const MessManagementModule = () => {
                     lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '', isClosed: false },
                     dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '', isClosed: false }
                 });
+            }
+            if (data?.weeklyMenu) {
+                setWeeklyMenu(data.weeklyMenu);
             }
             if (data?.specialFoodMasterList) {
                 setMasterList(data.specialFoodMasterList);
@@ -1882,6 +1930,24 @@ const MessManagementModule = () => {
             });
             if (res.ok) {
                 setMenuPublished(true);
+            }
+        } catch (err) { }
+        setLoading(false);
+    };
+
+    const handleUpdateWeeklyMenu = async () => {
+        setLoading(true);
+        try {
+            const res = await fetch('http://localhost:5000/api/student/config', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                },
+                body: JSON.stringify({ weeklyMenu })
+            });
+            if (res.ok) {
+                alert('Weekly Plan Saved Successfully! 📅');
             }
         } catch (err) { }
         setLoading(false);
@@ -2246,6 +2312,35 @@ const MessManagementModule = () => {
                         >
                             {menuPublished ? '✅ Published' : '🍙 Publish All Menus'}
                         </button>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+                                const todayName = days[new Date().getDay()];
+                                const todayPlan = weeklyMenu[todayName];
+                                if (todayPlan) {
+                                    setRegularMenu({
+                                        ...regularMenu,
+                                        breakfast: { ...regularMenu.breakfast, mainDish: todayPlan.breakfast.mainDish, sideDish: todayPlan.breakfast.sideDish },
+                                        lunch: { ...regularMenu.lunch, mainDish: todayPlan.lunch.mainDish, sideDish: todayPlan.lunch.sideDish },
+                                        dinner: { ...regularMenu.dinner, mainDish: todayPlan.dinner.mainDish, sideDish: todayPlan.dinner.sideDish }
+                                    });
+                                    setMenuPublished(false);
+                                    alert(`Loaded planned menu for ${todayName.toUpperCase()}! 📅`);
+                                }
+                            }}
+                            className="arena-btn"
+                            style={{
+                                padding: '0.7rem 1.5rem',
+                                background: 'rgba(59,130,246,0.1)',
+                                color: 'var(--accent-blue)',
+                                borderColor: 'rgba(59,130,246,0.2)'
+                            }}
+                            disabled={loading}
+                        >
+                            📅 Load Today's Plan
+                        </button>
                     </div>
                 </form>
 
@@ -2299,6 +2394,117 @@ const MessManagementModule = () => {
                             {specialFoodClosed ? '🛑' : '🟢'} Special Tokens (click to toggle)
                         </span>
                     )}
+                </div>
+            </div>
+
+            {/* Weekly Master Menu Management */}
+            <div className="arena-card animate-slide-up">
+                <h3 className="section-title">📅 Weekly Master Menu Plan</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    Set the default menu for each day of the week. You can load this into the daily menu with one click.
+                </p>
+
+                {/* Day Selection Tabs */}
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                    {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                        <button
+                            key={day}
+                            onClick={() => setActiveDay(day)}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                borderRadius: '8px',
+                                background: activeDay === day ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                                color: activeDay === day ? 'white' : 'var(--text-muted)',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                textTransform: 'capitalize',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {day.slice(0, 3)}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Session Selection for Weekly Plan */}
+                <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
+                    {['breakfast', 'lunch', 'dinner'].map(s => {
+                        const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+                        const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
+                        const isActive = activeWeeklySession === s;
+                        return (
+                            <button
+                                key={s}
+                                type="button"
+                                onClick={() => setActiveWeeklySession(s)}
+                                style={{
+                                    flex: 1,
+                                    padding: '0.8rem 1rem',
+                                    background: isActive ? `${colors[s]}22` : 'rgba(255,255,255,0.02)',
+                                    border: 'none',
+                                    borderBottom: isActive ? `3px solid ${colors[s]}` : '3px solid transparent',
+                                    color: isActive ? colors[s] : 'var(--text-muted)',
+                                    fontWeight: isActive ? 'bold' : 'normal',
+                                    fontSize: '0.85rem',
+                                    cursor: 'pointer',
+                                    textTransform: 'capitalize',
+                                    transition: 'all 0.2s ease',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    gap: '6px'
+                                }}
+                            >
+                                {icons[s]} {s}
+                            </button>
+                        );
+                    })}
+                </div>
+
+                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                    <div>
+                        <label className="field-label">Planned Main Dish</label>
+                        <input
+                            type="text"
+                            className="arena-input"
+                            value={weeklyMenu[activeDay][activeWeeklySession].mainDish}
+                            onChange={e => {
+                                setWeeklyMenu({
+                                    ...weeklyMenu,
+                                    [activeDay]: {
+                                        ...weeklyMenu[activeDay],
+                                        [activeWeeklySession]: { ...weeklyMenu[activeDay][activeWeeklySession], mainDish: e.target.value }
+                                    }
+                                });
+                            }}
+                            placeholder="Set main dish..."
+                        />
+                    </div>
+                    <div>
+                        <label className="field-label">Planned Side Dish</label>
+                        <input
+                            type="text"
+                            className="arena-input"
+                            value={weeklyMenu[activeDay][activeWeeklySession].sideDish}
+                            onChange={e => {
+                                setWeeklyMenu({
+                                    ...weeklyMenu,
+                                    [activeDay]: {
+                                        ...weeklyMenu[activeDay],
+                                        [activeWeeklySession]: { ...weeklyMenu[activeDay][activeWeeklySession], sideDish: e.target.value }
+                                    }
+                                });
+                            }}
+                            placeholder="Set side dish..."
+                        />
+                    </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '1rem' }}>
+                    <button onClick={handleUpdateWeeklyMenu} className="arena-btn" style={{ padding: '0.7rem 1.5rem' }}>
+                        💾 Save to Weekly Plan
+                    </button>
                 </div>
             </div>
 
