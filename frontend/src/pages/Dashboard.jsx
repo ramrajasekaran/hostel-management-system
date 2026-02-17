@@ -2191,24 +2191,6 @@ const MessManagementModule = () => {
                                     />
                                 </div>
                             </div>
-                            <div style={{ marginTop: '1.2rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                <input
-                                    type="checkbox"
-                                    id={`close-${session}`}
-                                    checked={regularMenu[session].isClosed}
-                                    onChange={e => {
-                                        setRegularMenu({
-                                            ...regularMenu,
-                                            [session]: { ...regularMenu[session], isClosed: e.target.checked }
-                                        });
-                                        setMenuPublished(false);
-                                    }}
-                                    style={{ width: '16px', height: '16px', cursor: 'pointer' }}
-                                />
-                                <label htmlFor={`close-${session}`} style={{ fontSize: '0.8rem', color: regularMenu[session].isClosed ? '#ef4444' : 'var(--text-muted)', cursor: 'pointer', fontWeight: regularMenu[session].isClosed ? 'bold' : 'normal' }}>
-                                    {regularMenu[session].isClosed ? '🛑 Session Manually Closed' : '🔓 Session Open for Students'}
-                                </label>
-                            </div>
                         </div>
                     ))}
                     <button
@@ -2226,6 +2208,114 @@ const MessManagementModule = () => {
                         {menuPublished ? '✅ Published Regular Menu' : '🍙 Publish Regular Menu'}
                     </button>
                 </form>
+            </div>
+
+            {/* Unified Mess Session Control */}
+            <div className="arena-card animate-slide-up" style={{
+                border: '1px solid rgba(239,68,68,0.15)',
+                background: 'rgba(239,68,68,0.02)'
+            }}>
+                <h3 className="section-title">🔒 Mess Session Control</h3>
+                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                    Close or open a session. Closed sessions are hidden from students.
+                </p>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <div style={{ flex: 1, minWidth: '200px' }}>
+                        <label className="field-label">Select Session</label>
+                        <select
+                            className="arena-input"
+                            id="session-control-select"
+                            defaultValue="breakfast"
+                        >
+                            <option value="breakfast">🍳 Breakfast</option>
+                            <option value="lunch">🍛 Lunch</option>
+                            <option value="dinner">🍱 Dinner</option>
+                            {config.feeStructureType === 'Separate' && (
+                                <option value="specialTokens">🎫 Special Food Tokens</option>
+                            )}
+                        </select>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            const sel = document.getElementById('session-control-select').value;
+                            setLoading(true);
+                            try {
+                                if (sel === 'specialTokens') {
+                                    const res = await fetch('http://localhost:5000/api/student/config', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                        },
+                                        body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                    });
+                                    if (res.ok) {
+                                        setSpecialFoodClosed(!specialFoodClosed);
+                                        alert(!specialFoodClosed ? 'Special Food Registration CLOSED! 🛑' : 'Special Food Registration OPENED! 🟢');
+                                    }
+                                } else {
+                                    const updatedMenu = {
+                                        ...regularMenu,
+                                        [sel]: { ...regularMenu[sel], isClosed: !regularMenu[sel].isClosed },
+                                        lastUpdated: new Date()
+                                    };
+                                    const res = await fetch('http://localhost:5000/api/student/config', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                        },
+                                        body: JSON.stringify({ regularMenu: updatedMenu })
+                                    });
+                                    if (res.ok) {
+                                        setRegularMenu(updatedMenu);
+                                        const label = sel.charAt(0).toUpperCase() + sel.slice(1);
+                                        alert(updatedMenu[sel].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
+                                    }
+                                }
+                            } catch (err) { }
+                            setLoading(false);
+                        }}
+                        className="arena-btn"
+                        style={{
+                            padding: '0.8rem 1.5rem',
+                            whiteSpace: 'nowrap'
+                        }}
+                        disabled={loading}
+                    >
+                        🔄 Toggle Selected Session
+                    </button>
+                </div>
+                <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                    {['breakfast', 'lunch', 'dinner'].map(s => (
+                        <span key={s} style={{
+                            padding: '4px 14px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            background: regularMenu[s].isClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                            color: regularMenu[s].isClosed ? '#ef4444' : '#22c55e',
+                            border: `1px solid ${regularMenu[s].isClosed ? '#ef444433' : '#22c55e33'}`,
+                            textTransform: 'capitalize'
+                        }}>
+                            {regularMenu[s].isClosed ? '🛑' : '🟢'} {s}
+                        </span>
+                    ))}
+                    {config.feeStructureType === 'Separate' && (
+                        <span style={{
+                            padding: '4px 14px',
+                            borderRadius: '20px',
+                            fontSize: '0.75rem',
+                            fontWeight: 'bold',
+                            background: specialFoodClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                            color: specialFoodClosed ? '#ef4444' : '#22c55e',
+                            border: `1px solid ${specialFoodClosed ? '#ef444433' : '#22c55e33'}`
+                        }}>
+                            {specialFoodClosed ? '🛑' : '🟢'} Special Tokens
+                        </span>
+                    )}
+                </div>
             </div>
 
             {/* SEPARATE MODE ONLY: Scheduling & Tokens */}
@@ -2271,40 +2361,7 @@ const MessManagementModule = () => {
                     </div>
 
                     <div className="arena-card animate-slide-up">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <h3 className="section-title" style={{ margin: 0 }}>Special Food Set (Scheduling)</h3>
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    setLoading(true);
-                                    try {
-                                        const res = await fetch('http://localhost:5000/api/student/config', {
-                                            method: 'POST',
-                                            headers: {
-                                                'Content-Type': 'application/json',
-                                                'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                                            },
-                                            body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
-                                        });
-                                        if (res.ok) {
-                                            setSpecialFoodClosed(!specialFoodClosed);
-                                            alert(!specialFoodClosed ? 'Special Food Registration CLOSED! 🛑' : 'Special Food Registration OPENED! 🟢');
-                                        }
-                                    } catch (err) { }
-                                    setLoading(false);
-                                }}
-                                className="arena-btn"
-                                style={{
-                                    fontSize: '0.75rem',
-                                    padding: '0.5rem 1rem',
-                                    background: specialFoodClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                    color: specialFoodClosed ? '#22c55e' : '#ef4444',
-                                    borderColor: specialFoodClosed ? '#22c55e' : '#ef4444'
-                                }}
-                            >
-                                {specialFoodClosed ? '🟢 Re-open Registration' : '🛑 Force Close Registration'}
-                            </button>
-                        </div>
+                        <h3 className="section-title">Special Food Set (Scheduling)</h3>
                         <form onSubmit={async (e) => {
                             e.preventDefault();
                             setLoading(true);
