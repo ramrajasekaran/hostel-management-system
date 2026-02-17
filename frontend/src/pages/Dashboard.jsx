@@ -1713,7 +1713,9 @@ const MessManagementModule = () => {
     const [feeInputs, setFeeInputs] = React.useState({
         hostelFee: '',
         fixedMessFee: '',
-        commonFoodFee: ''
+        commonFoodFee: '',
+        hostelBillingCycle: 'Yearly',
+        messBillingCycle: 'Yearly'
     });
     const [specialFood, setSpecialFood] = React.useState({
         specialFoodName: '',
@@ -1738,7 +1740,9 @@ const MessManagementModule = () => {
                 setFeeInputs({
                     hostelFee: data.hostelFee || '',
                     fixedMessFee: data.fixedMessFee || '',
-                    commonFoodFee: data.commonFoodFee || ''
+                    commonFoodFee: data.commonFoodFee || '',
+                    hostelBillingCycle: data.hostelBillingCycle || 'Yearly',
+                    messBillingCycle: data.messBillingCycle || 'Yearly'
                 });
             }
             if (data?.specialFoodName !== undefined) {
@@ -1840,7 +1844,9 @@ const MessManagementModule = () => {
                 type,
                 hostelFee: feeInputs.hostelFee || config.hostelFee,
                 fixedMessFee: feeInputs.fixedMessFee || config.fixedMessFee,
-                commonFoodFee: feeInputs.commonFoodFee || config.commonFoodFee
+                commonFoodFee: feeInputs.commonFoodFee || config.commonFoodFee,
+                hostelBillingCycle: feeInputs.hostelBillingCycle || config.hostelBillingCycle,
+                messBillingCycle: feeInputs.messBillingCycle || config.messBillingCycle
             };
             const res = await fetch('http://localhost:5000/api/student/fees/structure', {
                 method: 'POST',
@@ -1929,7 +1935,7 @@ const MessManagementModule = () => {
                         <h3 className="section-title" style={{ marginBottom: '4px' }}>Mess Operating Mode</h3>
                         <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                             Currently: <span style={{ color: config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6', fontWeight: 'bold' }}>
-                                {config.feeStructureType === 'Common' ? 'Fixed Monthly Fee (Common)' : 'Token Registration (Separate)'}
+                                {config.feeStructureType === 'Common' ? 'Fixed Yearly Fee (Common)' : 'Token Registration (Separate)'}
                             </span>
                         </p>
                     </div>
@@ -1956,11 +1962,11 @@ const MessManagementModule = () => {
 
                 <div className="profile-grid" style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '12px', position: 'relative', zIndex: 1 }}>
                     <ProfileItem label="Method" value={config.feeStructureType === 'Common' ? '🍚 COMMON / FIXED' : '🎫 SEPARATE / TOKEN'} valueColor={config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6'} />
-                    <ProfileItem label="Hostel Rent" value={`₹${config.hostelFee}`} />
+                    <ProfileItem label="Hostel Rent" value={`₹${config.hostelFee} / ${config.hostelBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} />
                     {config.feeStructureType === 'Common' ? (
-                        <ProfileItem label="Fixed Mess Bill" value={`₹${config.fixedMessFee}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Fixed Mess Bill" value={`₹${config.fixedMessFee} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
                     ) : (
-                        <ProfileItem label="Mess Utility (Base)" value={`₹${config.commonFoodFee}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Mess Utility (Base)" value={`₹${config.commonFoodFee} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
                     )}
                 </div>
             </div>
@@ -1970,37 +1976,73 @@ const MessManagementModule = () => {
                 <h3 className="section-title">Budget & Price Control</h3>
                 <form onSubmit={(e) => { e.preventDefault(); handleUpdateStructure(config.feeStructureType); }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
                     <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                        <div>
-                            <label className="field-label">Hostel Rent (Fixed)</label>
-                            <input
-                                type="number"
-                                className="arena-input"
-                                value={feeInputs.hostelFee}
-                                onChange={e => setFeeInputs({ ...feeInputs, hostelFee: e.target.value })}
-                                placeholder="e.g. 30000"
-                            />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            <label className="field-label">Hostel Rent ({feeInputs.hostelBillingCycle})</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input
+                                    type="number"
+                                    className="arena-input"
+                                    value={feeInputs.hostelFee}
+                                    onChange={e => setFeeInputs({ ...feeInputs, hostelFee: e.target.value })}
+                                    placeholder="e.g. 30000"
+                                    style={{ flex: 1 }}
+                                />
+                                <select
+                                    className="arena-input"
+                                    style={{ width: 'fit-content' }}
+                                    value={feeInputs.hostelBillingCycle}
+                                    onChange={e => setFeeInputs({ ...feeInputs, hostelBillingCycle: e.target.value })}
+                                >
+                                    <option value="Monthly">Monthly</option>
+                                    <option value="Yearly">Yearly</option>
+                                </select>
+                            </div>
                         </div>
                         {config.feeStructureType === 'Common' ? (
-                            <div>
-                                <label className="field-label">Fixed Monthly Mess Fee</label>
-                                <input
-                                    type="number"
-                                    className="arena-input"
-                                    value={feeInputs.fixedMessFee}
-                                    onChange={e => setFeeInputs({ ...feeInputs, fixedMessFee: e.target.value })}
-                                    placeholder="e.g. 50000"
-                                />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <label className="field-label">Fixed Mess Fee ({feeInputs.messBillingCycle})</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="number"
+                                        className="arena-input"
+                                        value={feeInputs.fixedMessFee}
+                                        onChange={e => setFeeInputs({ ...feeInputs, fixedMessFee: e.target.value })}
+                                        placeholder="e.g. 50000"
+                                        style={{ flex: 1 }}
+                                    />
+                                    <select
+                                        className="arena-input"
+                                        style={{ width: 'fit-content' }}
+                                        value={feeInputs.messBillingCycle}
+                                        onChange={e => setFeeInputs({ ...feeInputs, messBillingCycle: e.target.value })}
+                                    >
+                                        <option value="Monthly">Monthly</option>
+                                        <option value="Yearly">Yearly</option>
+                                    </select>
+                                </div>
                             </div>
                         ) : (
-                            <div>
-                                <label className="field-label">Base Mess/Food Utility Fee</label>
-                                <input
-                                    type="number"
-                                    className="arena-input"
-                                    value={feeInputs.commonFoodFee}
-                                    onChange={e => setFeeInputs({ ...feeInputs, commonFoodFee: e.target.value })}
-                                    placeholder="e.g. 25000"
-                                />
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                <label className="field-label">Base Mess Utility Fee ({feeInputs.messBillingCycle})</label>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <input
+                                        type="number"
+                                        className="arena-input"
+                                        value={feeInputs.commonFoodFee}
+                                        onChange={e => setFeeInputs({ ...feeInputs, commonFoodFee: e.target.value })}
+                                        placeholder="e.g. 25000"
+                                        style={{ flex: 1 }}
+                                    />
+                                    <select
+                                        className="arena-input"
+                                        style={{ width: 'fit-content' }}
+                                        value={feeInputs.messBillingCycle}
+                                        onChange={e => setFeeInputs({ ...feeInputs, messBillingCycle: e.target.value })}
+                                    >
+                                        <option value="Monthly">Monthly</option>
+                                        <option value="Yearly">Yearly</option>
+                                    </select>
+                                </div>
                             </div>
                         )}
                     </div>
@@ -2270,7 +2312,9 @@ const FeesModule = ({ studentId, initialFees }) => {
         paid: initialFees?.paid || 0,
         pending: initialFees?.balance || 0,
         totalDue: 0,
-        structure: 'Common'
+        structure: 'Common',
+        hostelBillingCycle: 'Yearly',
+        messBillingCycle: 'Yearly'
     });
     const [history, setHistory] = React.useState([]);
     const [amount, setAmount] = React.useState('');
@@ -2288,7 +2332,9 @@ const FeesModule = ({ studentId, initialFees }) => {
                 paid: data.feesPaid,
                 pending: data.feesPending,
                 totalDue: data.totalDue,
-                structure: data.structure
+                structure: data.structure,
+                hostelBillingCycle: data.hostelBillingCycle || 'Yearly',
+                messBillingCycle: data.messBillingCycle || 'Yearly'
             });
         } catch (err) { }
     }, [studentId]);
@@ -2348,6 +2394,9 @@ const FeesModule = ({ studentId, initialFees }) => {
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Pending</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>₹{fees.pending}</p>
                     <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Total Due: ₹{fees.totalDue} ({fees.structure})</p>
+                    <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '4px' }}>
+                        Hostel: {fees.hostelBillingCycle} | Mess: {fees.messBillingCycle}
+                    </p>
                 </div>
                 <div className="arena-card" style={{ textAlign: 'center', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Paid</p>

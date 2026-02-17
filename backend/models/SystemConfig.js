@@ -37,9 +37,19 @@ const systemConfigSchema = new mongoose.Schema({
         type: Number,
         default: 30000 // Total per year (2 semesters)
     },
+    hostelBillingCycle: {
+        type: String,
+        enum: ['Monthly', 'Yearly'],
+        default: 'Yearly'
+    },
     fixedMessFee: {
         type: Number,
         default: 50000 // Total per year (Common mode)
+    },
+    messBillingCycle: {
+        type: String,
+        enum: ['Monthly', 'Yearly'],
+        default: 'Yearly'
     },
     commonFoodFee: {
         type: Number,
