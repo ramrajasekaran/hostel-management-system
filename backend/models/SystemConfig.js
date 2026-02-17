@@ -60,6 +60,10 @@ const systemConfigSchema = new mongoose.Schema({
         type: String,
         default: ''
     },
+    specialFoodNames: {
+        type: [String],
+        default: []
+    },
     specialFoodDate: {
         type: String, // YYYY-MM-DD
         default: ''
@@ -81,63 +85,83 @@ const systemConfigSchema = new mongoose.Schema({
         type: String, // YYYY-MM-DD
         default: ''
     },
+    specialFoodDay: {
+        type: String, // e.g., monday, everyday
+        default: ''
+    },
     specialFoodMasterList: {
-        type: [String],
+        type: [{
+            day: { type: String, required: true }, // e.g., monday, everyday
+            session: { type: String, required: true }, // e.g., breakfast, all
+            name: { type: String, required: true }
+        }],
         default: []
     },
     regularMenu: {
         breakfast: {
             mainDish: { type: String, default: '' },
             sideDish: { type: String, default: '' },
+            vegMain: { type: String, default: '' },
+            vegSide: { type: String, default: '' },
+            nonVegMain: { type: String, default: '' },
+            nonVegSide: { type: String, default: '' },
             isClosed: { type: Boolean, default: false }
         },
         lunch: {
             mainDish: { type: String, default: '' },
             sideDish: { type: String, default: '' },
+            vegMain: { type: String, default: '' },
+            vegSide: { type: String, default: '' },
+            nonVegMain: { type: String, default: '' },
+            nonVegSide: { type: String, default: '' },
             isClosed: { type: Boolean, default: false }
         },
         dinner: {
             mainDish: { type: String, default: '' },
             sideDish: { type: String, default: '' },
+            vegMain: { type: String, default: '' },
+            vegSide: { type: String, default: '' },
+            nonVegMain: { type: String, default: '' },
+            nonVegSide: { type: String, default: '' },
             isClosed: { type: Boolean, default: false }
         },
         lastUpdated: { type: Date, default: Date.now }
     },
     weeklyMenu: {
         monday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         tuesday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         wednesday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         thursday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         friday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         saturday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         },
         sunday: {
-            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } },
-            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' } }
+            breakfast: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            lunch: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } },
+            dinner: { mainDish: { type: String, default: '' }, sideDish: { type: String, default: '' }, vegMain: { type: String, default: '' }, vegSide: { type: String, default: '' }, nonVegMain: { type: String, default: '' }, nonVegSide: { type: String, default: '' } }
         }
     },
     specialFoodClosed: {

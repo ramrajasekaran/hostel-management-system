@@ -1477,9 +1477,11 @@ const ComplaintModule = ({ studentId }) => {
 
 const StudentMessModule = ({ studentId }) => {
     const { user } = useAuth();
+    const socket = useSocket();
     const [tokens, setTokens] = React.useState([]);
     const [loading, setLoading] = React.useState(false);
     const [config, setConfig] = React.useState(null);
+    const [selectedFood, setSelectedFood] = React.useState('');
 
     const fetchConfig = React.useCallback(async () => {
         try {
@@ -1512,12 +1514,32 @@ const StudentMessModule = ({ studentId }) => {
     React.useEffect(() => {
         fetchTokens();
         fetchConfig();
-        // Auto-poll config every 10 seconds for real-time session updates
+
+        if (socket) {
+            socket.on('config_update', (data) => {
+                setConfig(data);
+                // Reset selection if the published list changes significantly
+                if (data.specialFoodNames && data.specialFoodNames.length > 0) {
+                    if (!data.specialFoodNames.includes(selectedFood)) {
+                        setSelectedFood(data.specialFoodNames[0]);
+                    }
+                }
+            });
+        }
+
+        // Auto-poll config every 10 seconds as fallback
         const interval = setInterval(fetchConfig, 10000);
-        return () => clearInterval(interval);
-    }, [fetchTokens, fetchConfig]);
+        return () => {
+            clearInterval(interval);
+            if (socket) socket.off('config_update');
+        };
+    }, [fetchTokens, fetchConfig, socket]);
 
     const handleGenerate = async (type) => {
+        if (!selectedFood && (config?.specialFoodNames?.length > 0)) {
+            alert('Please select a food item first.');
+            return;
+        }
         setLoading(true);
         try {
             const res = await fetch('http://localhost:5000/api/student/mess/token/generate', {
@@ -1526,12 +1548,16 @@ const StudentMessModule = ({ studentId }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
                 },
-                body: JSON.stringify({ studentId, tokenType: type })
+                body: JSON.stringify({
+                    studentId,
+                    tokenType: type,
+                    foodName: selectedFood || config.specialFoodName
+                })
             });
             const data = await res.json();
             if (res.ok) {
                 fetchTokens();
-                alert(`${type} Token Generated!`);
+                alert(`${type} Token Generated for ${selectedFood || config.specialFoodName}!`);
             } else {
                 alert(data.message || 'Error generating token');
             }
@@ -1540,7 +1566,9 @@ const StudentMessModule = ({ studentId }) => {
     };
 
     const isRegistrationOpen = () => {
-        if (!config || config.specialFoodSession === 'None' || !config.specialFoodStartTime || !config.specialFoodEndTime || config.specialFoodClosed) return false;
+        if (!config || (config.specialFoodSession === 'None' || config.specialFoodSession === undefined) || !config.specialFoodStartTime || !config.specialFoodEndTime || config.specialFoodClosed) return false;
+        // Check if at least one special food is published
+        if (!config.specialFoodName && (!config.specialFoodNames || config.specialFoodNames.length === 0)) return false;
 
         const now = new Date();
         const d = String(now.getDate()).padStart(2, '0');
@@ -1560,7 +1588,9 @@ const StudentMessModule = ({ studentId }) => {
         const endMinutes = (() => {
             try {
                 const [h, m] = (config.specialFoodEndTime || "00:00").split(':').map(Number);
-                return (h || 0) * 60 + (m || 0);
+                let val = (h || 0) * 60 + (m || 0);
+                if (val === 0) val = 1440;
+                return val;
             } catch (e) { return 0; }
         })();
 
@@ -1589,108 +1619,100 @@ const StudentMessModule = ({ studentId }) => {
         const endMinutes = (() => {
             try {
                 const [h, m] = (config.specialFoodEndTime || "00:00").split(':').map(Number);
-                return (h || 0) * 60 + (m || 0);
+                let val = (h || 0) * 60 + (m || 0);
+                if (val === 0) val = 1440;
+                return val;
             } catch (e) { return 0; }
         })();
 
-        if (currentTimeMinutes < startMinutes) return `Registration for ${config.specialFoodName || 'Special Food'} opens at ${formatTime12h(config.specialFoodStartTime)}.`;
-        if (currentTimeMinutes > endMinutes) return `Registration for ${config.specialFoodName || 'Special Food'} is finished/closed.`;
+        if (currentTimeMinutes < startMinutes) return `Registration for Special Food opens at ${formatTime12h(config.specialFoodStartTime)}.`;
+        if (currentTimeMinutes > endMinutes) return `Registration for Special Food is finished/closed.`;
 
-        return `Registration for ${config.specialFoodName || 'Special Food'} is ACTIVE until ${formatTime12h(config.specialFoodEndTime)}.`;
+        return `Registration for Special Food is ACTIVE until ${formatTime12h(config.specialFoodEndTime)}.`;
     };
 
     return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
             {/* Daily Regular Menu Section */}
-            {(() => {
-                const sessions = ['breakfast', 'lunch', 'dinner'];
-                const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
-                const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+            <div className="arena-card animate-slide-up" style={{
+                background: 'rgba(59,130,246,0.02)',
+                border: '1px solid rgba(59,130,246,0.1)',
+                padding: '1.5rem'
+            }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <h4 style={{ color: 'var(--accent-blue)', fontSize: '1.1rem', fontWeight: '800' }}>🍽️ TODAY'S REGULAR MENU</h4>
+                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'long' })}</span>
+                </div>
 
-                const todayName = days[new Date().getDay()];
-                const activeSession = sessions.find(s => !config?.regularMenu?.[s]?.isClosed);
+                <div className="census-grid" style={{
+                    display: 'grid',
+                    gridTemplateColumns: (['breakfast', 'lunch', 'dinner'].filter(s => config?.regularMenu?.[s]?.mainDish?.trim() && !config?.regularMenu?.[s]?.isClosed).length > 0) ? 'repeat(auto-fit, minmax(250px, 1fr))' : '1fr',
+                    gap: '1rem'
+                }}>
+                    {(() => {
+                        const activeSessions = ['breakfast', 'lunch', 'dinner'].filter(s => {
+                            const sessionMenu = config?.regularMenu?.[s];
+                            return sessionMenu?.mainDish && sessionMenu.mainDish.trim() !== '' && !sessionMenu.isClosed;
+                        });
 
-                // Get menu from daily regularMenu, or fallback to weeklyMenu if daily is empty
-                let menu = activeSession ? config?.regularMenu?.[activeSession] : null;
-                let isPlanned = false;
+                        if (activeSessions.length === 0) {
+                            return (
+                                <div style={{ textAlign: 'center', padding: '2rem', opacity: 0.6 }}>
+                                    <p style={{ fontSize: '1rem', fontStyle: 'italic' }}>🍽️ No menu items published yet. Check back soon!</p>
+                                </div>
+                            );
+                        }
 
-                if (activeSession && (!menu?.mainDish || menu.mainDish.trim() === '')) {
-                    if (config?.weeklyMenu?.[todayName]?.[activeSession]) {
-                        menu = config.weeklyMenu[todayName][activeSession];
-                        isPlanned = true;
-                    }
-                }
+                        return activeSessions.map(s => {
+                            const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
+                            const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+                            const sessionMenu = config.regularMenu[s];
 
-                const hasMenu = menu?.mainDish && menu.mainDish.trim() !== '';
-
-                return (
-                    <div className="arena-card animate-slide-up" style={{
-                        background: 'rgba(59,130,246,0.05)',
-                        border: '1px solid rgba(59,130,246,0.1)',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        gap: '1rem'
-                    }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <h4 style={{ color: 'var(--accent-blue)', fontSize: '1rem' }}>Today's Regular Menu</h4>
-                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>
-                                    {todayName}, {new Date().toLocaleDateString()}
-                                </span>
-                            </div>
-                            {activeSession && (
-                                <span style={{
-                                    padding: '3px 12px',
-                                    borderRadius: '16px',
-                                    fontSize: '0.72rem',
-                                    fontWeight: 'bold',
-                                    background: `${colors[activeSession]}22`,
-                                    color: colors[activeSession],
-                                    border: `1px solid ${colors[activeSession]}44`,
-                                    textTransform: 'capitalize'
+                            return (
+                                <div key={s} className="arena-card animate-scale-up" style={{
+                                    padding: '1.2rem',
+                                    background: 'rgba(255,255,255,0.03)',
+                                    border: `1.2px solid ${colors[s]}44`,
+                                    position: 'relative',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '1rem'
                                 }}>
-                                    {icons[activeSession]} {activeSession}
-                                </span>
-                            )}
-                        </div>
-                        {activeSession && hasMenu ? (
-                            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap', position: 'relative' }}>
-                                {isPlanned && (
-                                    <span style={{
-                                        position: 'absolute',
-                                        top: '-15px',
-                                        right: '0',
-                                        fontSize: '0.55rem',
-                                        color: 'var(--text-muted)',
-                                        background: 'rgba(255,255,255,0.03)',
-                                        padding: '2px 8px',
-                                        borderRadius: '4px'
-                                    }}>
-                                        📅 Planned Menu
-                                    </span>
-                                )}
-                                <div style={{ flex: 1, minWidth: '120px' }}>
-                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Main Dish</p>
-                                    <p style={{ fontWeight: '700', fontSize: '1.1rem', color: 'var(--text-main)' }}>
-                                        {menu.mainDish}
-                                    </p>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.75rem', fontWeight: '800', color: colors[s], textTransform: 'uppercase', letterSpacing: '1px' }}>{icons[s]} {s}</span>
+                                        <span style={{ fontSize: '0.6rem', padding: '2px 8px', background: `${colors[s]}22`, color: colors[s], borderRadius: '12px', border: `1px solid ${colors[s]}44` }}>SESSION OPEN</span>
+                                    </div>
+
+                                    {/* Dual Menu Display */}
+                                    <div style={{ display: 'grid', gridTemplateColumns: (sessionMenu.nonVegMain) ? '1fr 1fr' : '1fr', gap: '0.8rem' }}>
+                                        <div style={{ background: 'rgba(34,197,94,0.05)', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.1)' }}>
+                                            <span style={{ fontSize: '0.55rem', color: '#22c55e', textTransform: 'uppercase', fontWeight: 'bold' }}>Veg</span>
+                                            <p style={{ fontWeight: '800', fontSize: '1rem', color: 'white', marginTop: '4px' }}>{sessionMenu.vegMain || sessionMenu.mainDish || 'N/A'}</p>
+                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{sessionMenu.vegSide || sessionMenu.sideDish || '---'}</p>
+                                        </div>
+                                        {sessionMenu.nonVegMain && (
+                                            <div style={{ background: 'rgba(239,68,68,0.05)', padding: '0.8rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.1)' }}>
+                                                <span style={{ fontSize: '0.55rem', color: '#ef4444', textTransform: 'uppercase', fontWeight: 'bold' }}>Non-Veg</span>
+                                                <p style={{ fontWeight: '800', fontSize: '1rem', color: 'white', marginTop: '4px' }}>{sessionMenu.nonVegMain}</p>
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{sessionMenu.nonVegSide || '---'}</p>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div style={{ marginTop: 'auto', paddingTop: '0.8rem', borderTop: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ fontSize: '0.6rem', color: 'var(--text-muted)', textTransform: 'uppercase' }}>Daily Regular Menu</span>
+                                        {config.regularMenu?.lastUpdated && (
+                                            <span style={{ fontSize: '0.6rem', color: 'var(--accent-blue)' }}>
+                                                {new Date(config.regularMenu.lastUpdated).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
-                                <div style={{ flex: 1, minWidth: '120px' }}>
-                                    <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', marginBottom: '4px' }}>Side Dish</p>
-                                    <p style={{ fontWeight: '500', fontSize: '1rem', color: 'var(--text-muted)' }}>
-                                        {menu?.sideDish || '---'}
-                                    </p>
-                                </div>
-                            </div>
-                        ) : (
-                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', textAlign: 'center', padding: '1.5rem 0' }}>
-                                {activeSession ? 'Menu not published yet.' : 'All sessions are currently closed.'}
-                            </p>
-                        )}
-                    </div>
-                );
-            })()}
+                            );
+                        });
+                    })()}
+                </div>
+            </div>
 
             <div className="arena-card" style={{
                 background: isRegistrationOpen() ? 'rgba(34,197,94,0.05)' : 'rgba(239,68,68,0.05)',
@@ -1698,7 +1720,7 @@ const StudentMessModule = ({ studentId }) => {
                 textAlign: 'center'
             }}>
                 <h4 style={{ color: isRegistrationOpen() ? '#22c55e' : '#ef4444', marginBottom: '1rem' }}>
-                    {config?.specialFoodName || 'Special Food Token'}
+                    {isRegistrationOpen() ? '🌙 SPECIAL FOOD REGISTRATION' : '📅 SPECIAL FOOD SESSION'}
                 </h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.5rem' }}>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -1712,6 +1734,34 @@ const StudentMessModule = ({ studentId }) => {
                     <p style={{ fontSize: '0.9rem', fontWeight: 'bold', color: 'var(--text-main)' }}>
                         {registrationStatusMsg()}
                     </p>
+
+                    {isRegistrationOpen() && config?.specialFoodNames?.length > 0 && (
+                        <div style={{ marginTop: '1rem', textAlign: 'left' }}>
+                            <label className="field-label" style={{ textAlign: 'center', display: 'block' }}>Choose Your Special Dish:</label>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem', marginTop: '0.5rem' }}>
+                                {config.specialFoodNames.map((name, idx) => (
+                                    <div
+                                        key={idx}
+                                        onClick={() => setSelectedFood(name)}
+                                        style={{
+                                            padding: '12px',
+                                            borderRadius: '10px',
+                                            background: selectedFood === name ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.03)',
+                                            border: selectedFood === name ? '1.5px solid #22c55e' : '1px solid var(--border-main)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    >
+                                        <span style={{ fontWeight: '600', color: selectedFood === name ? '#22c55e' : 'white' }}>{name}</span>
+                                        {selectedFood === name && <span style={{ color: '#22c55e' }}>● Selected</span>}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
                 </div>
                 <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                     <button
@@ -1721,14 +1771,6 @@ const StudentMessModule = ({ studentId }) => {
                         style={{ opacity: isRegistrationOpen() ? 1 : 0.5 }}
                     >
                         Get Digital Token
-                    </button>
-                    <button
-                        onClick={() => handleGenerate('Manual')}
-                        className="arena-btn btn-secondary"
-                        disabled={loading || !isRegistrationOpen()}
-                        style={{ opacity: isRegistrationOpen() ? 1 : 0.5 }}
-                    >
-                        Register Manual Token
                     </button>
                 </div>
             </div>
@@ -1748,7 +1790,6 @@ const StudentMessModule = ({ studentId }) => {
                                 position: 'relative'
                             }}>
                                 <div style={{ fontSize: '0.6rem', opacity: 0.7, marginBottom: '4px' }}>{t.tokenType.toUpperCase()} PASS</div>
-                                <div style={{ fontWeight: 'bold', fontSize: '1.2rem', marginBottom: '4px' }}>{t.tokenId}</div>
                                 <div style={{ fontSize: '0.8rem', fontWeight: 'bold', color: 'rgba(255,255,255,0.9)', marginBottom: '4px' }}>{t.foodName || 'Special Food'}</div>
                                 <div style={{ fontSize: '0.7rem', opacity: 0.8, marginBottom: '4px' }}>{t.sessionType} | {user?.rollNo || user?.registerNo || 'N/A'}</div>
                                 {t.providingDate && <div style={{ fontSize: '0.75rem', color: '#ffd700', fontWeight: 'bold', marginBottom: '8px' }}>FOR: {t.providingDate}</div>}
@@ -1777,6 +1818,7 @@ const StudentMessModule = ({ studentId }) => {
 
 const MessManagementModule = () => {
     const { user } = useAuth();
+    const socket = useSocket();
     const [config, setConfig] = React.useState(null);
     const [activeTokens, setActiveTokens] = React.useState([]);
     const [loading, setLoading] = React.useState(false);
@@ -1790,31 +1832,69 @@ const MessManagementModule = () => {
     });
     const [specialFood, setSpecialFood] = React.useState({
         specialFoodName: '',
+        specialFoodNames: [],
         specialFoodDate: '',
         specialFoodProvidingDate: '',
+        specialFoodDay: '',
         specialFoodStartTime: '08:00',
         specialFoodEndTime: '10:00',
         specialFoodSession: 'None'
     });
     const [regularMenu, setRegularMenu] = React.useState({
-        breakfast: { mainDish: '', sideDish: '', isClosed: false },
-        lunch: { mainDish: '', sideDish: '', isClosed: false },
-        dinner: { mainDish: '', sideDish: '', isClosed: false }
+        breakfast: { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false },
+        lunch: { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false },
+        dinner: { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false }
     });
     const [menuPublished, setMenuPublished] = React.useState(false);
     const [masterList, setMasterList] = React.useState([]);
     const [newFoodItem, setNewFoodItem] = React.useState('');
+    const [newFoodDay, setNewFoodDay] = React.useState('everyday');
+    const [newFoodSession, setNewFoodSession] = React.useState('all');
     const [specialFoodClosed, setSpecialFoodClosed] = React.useState(false);
-    const [activeMenuSession, setActiveMenuSession] = React.useState('breakfast');
-    const [activeDay, setActiveDay] = React.useState('monday');
+    const [activeMenuSession, setActiveMenuSession] = React.useState(() => {
+        const hour = new Date().getHours();
+        if (hour < 11) return 'breakfast';
+        if (hour < 16) return 'lunch';
+        return 'dinner';
+    });
+    const [activeDay, setActiveDay] = React.useState(['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()]);
+    const [isEditingPlan, setIsEditingPlan] = React.useState(false);
     const [weeklyMenu, setWeeklyMenu] = React.useState({
-        monday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        tuesday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        wednesday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        thursday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        friday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        saturday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } },
-        sunday: { breakfast: { mainDish: '', sideDish: '' }, lunch: { mainDish: '', sideDish: '' }, dinner: { mainDish: '', sideDish: '' } }
+        monday: {
+            breakfast: { mainDish: 'Idli', sideDish: 'Sambar & Chutney', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Veg Meals', sideDish: 'Kootu & Poriyal', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Chapathi', sideDish: 'Dal Fry', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        tuesday: {
+            breakfast: { mainDish: 'Dosa', sideDish: 'Sambar & Tomato Chutney', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Variety Rice', sideDish: 'Potato Fry', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Poori', sideDish: 'Potato Masala', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        wednesday: {
+            breakfast: { mainDish: 'Pongal', sideDish: 'Sambar & Ghee', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Sambar Rice', sideDish: 'Appalam & Pickle', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Parotta', sideDish: 'Salna', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        thursday: {
+            breakfast: { mainDish: 'Poori Masala', sideDish: 'Coconut Chutney', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Veg Pulav', sideDish: 'Raitha', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Idli', sideDish: 'Sambar', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        friday: {
+            breakfast: { mainDish: 'Uthappam', sideDish: 'Sambar & Onion Chutney', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Veg Biryani', sideDish: 'Onion Raitha', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Chapathi', sideDish: 'Veg Kurma', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        saturday: {
+            breakfast: { mainDish: 'Kichadi', sideDish: 'Coconut Chutney', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Variety Rice', sideDish: 'Curd Rice', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Fried Rice', sideDish: 'Tomato Ketchup', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        },
+        sunday: {
+            breakfast: { mainDish: 'Appam', sideDish: 'Coconut Milk', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            lunch: { mainDish: 'Special Meals', sideDish: 'Payasam & Vadai', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' },
+            dinner: { mainDish: 'Dosa', sideDish: 'Sambar', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '' }
+        }
     });
 
     const fetchConfig = React.useCallback(async () => {
@@ -1833,11 +1913,13 @@ const MessManagementModule = () => {
                     messBillingCycle: data.messBillingCycle || 'Yearly'
                 });
             }
-            if (data?.specialFoodName !== undefined) {
+            if (data?.specialFoodName !== undefined || data?.specialFoodNames !== undefined) {
                 setSpecialFood({
                     specialFoodName: data.specialFoodName || '',
+                    specialFoodNames: data.specialFoodNames || [],
                     specialFoodDate: data.specialFoodDate || '',
                     specialFoodProvidingDate: data.specialFoodProvidingDate || '',
+                    specialFoodDay: data.specialFoodDay || '',
                     specialFoodStartTime: data.specialFoodStartTime || '08:00',
                     specialFoodEndTime: data.specialFoodEndTime || '10:00',
                     specialFoodSession: data.specialFoodSession || 'None'
@@ -1848,13 +1930,20 @@ const MessManagementModule = () => {
             }
             if (data?.regularMenu) {
                 setRegularMenu({
-                    breakfast: data.regularMenu.breakfast || { mainDish: '', sideDish: '', isClosed: false },
-                    lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '', isClosed: false },
-                    dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '', isClosed: false }
+                    breakfast: data.regularMenu.breakfast || { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false },
+                    lunch: data.regularMenu.lunch || { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false },
+                    dinner: data.regularMenu.dinner || { mainDish: '', sideDish: '', vegMain: '', vegSide: '', nonVegMain: '', nonVegSide: '', isClosed: false }
                 });
             }
             if (data?.weeklyMenu) {
-                setWeeklyMenu(data.weeklyMenu);
+                // Only overwrite if at least one dish is set in the server data
+                const isServerMenuEmpty = !Object.values(data.weeklyMenu).some(day =>
+                    Object.values(day).some(session => (session.mainDish && session.mainDish.trim()) || (session.vegMain && session.vegMain.trim()))
+                );
+
+                if (!isServerMenuEmpty) {
+                    setWeeklyMenu(data.weeklyMenu);
+                }
             }
             if (data?.specialFoodMasterList) {
                 setMasterList(data.specialFoodMasterList);
@@ -1875,11 +1964,28 @@ const MessManagementModule = () => {
     React.useEffect(() => {
         fetchConfig();
         fetchActiveTokens();
-    }, [fetchConfig, fetchActiveTokens]);
+
+        if (socket) {
+            socket.on('config_update', (data) => {
+                setConfig(data);
+                if (data.regularMenu) setRegularMenu(data.regularMenu);
+                if (data.weeklyMenu) setWeeklyMenu(data.weeklyMenu);
+            });
+        }
+
+        return () => {
+            if (socket) socket.off('config_update');
+        };
+    }, [fetchConfig, fetchActiveTokens, socket]);
 
     const handleAddFood = async () => {
         if (!newFoodItem.trim()) return;
-        const updatedList = [...masterList, newFoodItem.trim()];
+        const newItem = {
+            day: newFoodDay,
+            session: newFoodSession,
+            name: newFoodItem.trim()
+        };
+        const updatedList = [...masterList, newItem];
         setLoading(true);
         try {
             const res = await fetch('http://localhost:5000/api/student/config', {
@@ -1898,8 +2004,8 @@ const MessManagementModule = () => {
         setLoading(false);
     };
 
-    const handleRemoveFood = async (item) => {
-        const updatedList = masterList.filter(i => i !== item);
+    const handleRemoveFood = async (itemToRemove) => {
+        const updatedList = masterList.filter(i => i !== itemToRemove);
         setLoading(true);
         try {
             const res = await fetch('http://localhost:5000/api/student/config', {
@@ -2042,11 +2148,11 @@ const MessManagementModule = () => {
 
                 <div className="profile-grid" style={{ background: 'rgba(0,0,0,0.2)', padding: '1.2rem', borderRadius: '12px', position: 'relative', zIndex: 1 }}>
                     <ProfileItem label="Method" value={config.feeStructureType === 'Common' ? '🍚 COMMON / FIXED' : '🎫 SEPARATE / TOKEN'} valueColor={config.feeStructureType === 'Common' ? '#22c55e' : '#3b82f6'} />
-                    <ProfileItem label="Hostel Rent" value={`₹${config.hostelFee} / ${config.hostelBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} />
+                    <ProfileItem label="Hostel Rent" value={`₹${Math.round(config.hostelFee)} / ${config.hostelBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} />
                     {config.feeStructureType === 'Common' ? (
-                        <ProfileItem label="Fixed Mess Bill" value={`₹${config.fixedMessFee} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Fixed Mess Bill" value={`₹${Math.round(config.fixedMessFee)} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
                     ) : (
-                        <ProfileItem label="Mess Utility (Base)" value={`₹${config.commonFoodFee} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
+                        <ProfileItem label="Mess Utility (Base)" value={`₹${Math.round(config.commonFoodFee)} / ${config.messBillingCycle === 'Monthly' ? 'Month' : 'Year'}`} valueColor="#fbbf24" />
                     )}
                 </div>
             </div>
@@ -2134,58 +2240,317 @@ const MessManagementModule = () => {
                 </form>
             </div>
 
-            {/* Unified Menu Management & Session Control */}
-            <div className="arena-card animate-slide-up">
-                <h3 className="section-title">Menu Management & Session Control</h3>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                    Select a day and session to plan the menu. "Publish" updates the Live Menu if today is selected.
-                </p>
-
-                {/* Day Selection Tabs */}
-                <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
-                    {(() => {
-                        const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-                        const todayIndex = new Date().getDay();
-                        // Order days starting from today? Or just standard Mon-Sun? Let's do Mon-Sun for planning clarity.
-                        // Actually, user might prefer Today first. Let's stick to standard week but highlight Today.
-                        const orderedDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
-
-                        return orderedDays.map(day => {
-                            const isToday = days[todayIndex] === day;
-                            return (
-                                <button
-                                    key={day}
-                                    onClick={() => setActiveDay(day)}
-                                    style={{
-                                        padding: '0.5rem 1rem',
-                                        borderRadius: '8px',
-                                        background: activeDay === day ? 'var(--accent-blue)' : isToday ? 'rgba(34,197,94,0.1)' : 'rgba(255,255,255,0.05)',
-                                        color: activeDay === day ? 'white' : isToday ? '#22c55e' : 'var(--text-muted)',
-                                        border: isToday ? '1px solid rgba(34,197,94,0.2)' : 'none',
-                                        cursor: 'pointer',
-                                        fontSize: '0.8rem',
-                                        textTransform: 'capitalize',
-                                        transition: 'all 0.2s',
-                                        fontWeight: isToday ? 'bold' : 'normal'
-                                    }}
-                                >
-                                    {day.slice(0, 3)} {isToday && ' (Today)'}
-                                </button>
-                            );
-                        });
-                    })()}
+            {/* Daily Session Control (Live Operations) */}
+            <div className="arena-card animate-slide-up" style={{ border: '1px solid var(--accent-blue)', background: 'rgba(59,130,246,0.01)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div>
+                        <h3 className="section-title" style={{ marginBottom: '4px' }}>🚀 Menu Management & Session Control</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            Publish planned menus to students and close sessions when finished.
+                        </p>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block' }}>SERVER TIME</span>
+                        <span style={{ fontWeight: 'bold', color: 'var(--accent-blue)' }}>{new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
                 </div>
 
-                {/* Session Tabs */}
+                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: '2rem' }}>
+                    {/* Left Side: Day & Session Selection */}
+                    <div style={{ borderRight: '1px solid var(--border-main)', paddingRight: '1.5rem' }}>
+                        <label className="field-label">1. Select Target Day</label>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginBottom: '1.5rem' }}>
+                            {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => {
+                                const isToday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === day;
+                                return (
+                                    <button
+                                        key={day}
+                                        onClick={() => setActiveDay(day)}
+                                        style={{
+                                            padding: '0.6rem',
+                                            borderRadius: '8px',
+                                            background: activeDay === day ? 'var(--accent-blue)' : 'rgba(255,255,255,0.03)',
+                                            color: activeDay === day ? 'white' : 'var(--text-muted)',
+                                            border: isToday ? '1px solid rgba(34,197,94,0.4)' : '1px solid transparent',
+                                            cursor: 'pointer',
+                                            fontSize: '0.75rem',
+                                            textTransform: 'capitalize',
+                                            fontWeight: isToday ? 'bold' : 'normal'
+                                        }}
+                                    >
+                                        {day.slice(0, 3)} {isToday && '●'}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        <label className="field-label">2. Select Session</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {['breakfast', 'lunch', 'dinner'].map(s => {
+                                const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
+                                const isActive = activeMenuSession === s;
+                                const isClosed = regularMenu[s]?.isClosed;
+
+                                return (
+                                    <button
+                                        key={s}
+                                        onClick={() => setActiveMenuSession(s)}
+                                        style={{
+                                            padding: '0.8rem',
+                                            borderRadius: '8px',
+                                            background: isActive ? `${colors[s]}15` : 'rgba(255,255,255,0.02)',
+                                            border: `1px solid ${isActive ? colors[s] : 'var(--border-main)'}`,
+                                            color: isActive ? colors[s] : 'var(--text-muted)',
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            justifyContent: 'space-between',
+                                            alignItems: 'center',
+                                            textTransform: 'capitalize',
+                                            fontWeight: isActive ? 'bold' : 'normal'
+                                        }}
+                                    >
+                                        <span>{s}</span>
+                                        <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                            {regularMenu[s]?.mainDish?.trim() && !isClosed && (
+                                                <span style={{ fontSize: '0.55rem', background: '#22c55e', color: 'black', padding: '1px 4px', borderRadius: '3px', fontWeight: 'bold' }}>LIVE</span>
+                                            )}
+                                            {isClosed ? (
+                                                <span style={{ fontSize: '0.6rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', padding: '2px 6px', borderRadius: '4px' }}>CLOSED</span>
+                                            ) : (
+                                                <span style={{ fontSize: '0.6rem', background: 'rgba(34,197,94,0.2)', color: '#22c55e', padding: '2px 6px', borderRadius: '4px' }}>OPEN</span>
+                                            )}
+                                        </div>
+                                    </button>
+                                );
+                            })}
+                        </div>
+                    </div>
+
+                    {/* Right Side: Preview & Actions */}
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                        <div style={{
+                            background: 'rgba(0,0,0,0.2)',
+                            padding: '1.5rem',
+                            borderRadius: '12px',
+                            marginBottom: '2rem',
+                            border: '1px solid rgba(255,255,255,0.05)',
+                            textAlign: 'center'
+                        }}>
+                            <h4 style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                                Preview: {activeDay} {activeMenuSession}
+                            </h4>
+
+                            <div style={{ display: 'flex', gap: '3rem', justifyContent: 'center', alignItems: 'center' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>MAIN DISH</span>
+                                    <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-main)' }}>
+                                        {weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish || '---'}
+                                    </span>
+                                </div>
+                                <div style={{ width: '1px', height: '40px', background: 'var(--border-main)' }} />
+                                <div>
+                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>SIDE DISH</span>
+                                    <span style={{ fontSize: '1.4rem', fontWeight: '800', color: 'var(--text-muted)' }}>
+                                        {weeklyMenu[activeDay]?.[activeMenuSession]?.sideDish || '---'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '1rem' }}>
+                            {(() => {
+                                const isPublished = regularMenu[activeMenuSession]?.mainDish === weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish && !regularMenu[activeMenuSession]?.isClosed;
+                                return (
+                                    <button
+                                        onClick={async () => {
+                                            setLoading(true);
+                                            try {
+                                                const updatedRegular = {
+                                                    ...regularMenu,
+                                                    [activeMenuSession]: {
+                                                        ...weeklyMenu[activeDay][activeMenuSession],
+                                                        isClosed: false
+                                                    },
+                                                    lastUpdated: new Date()
+                                                };
+                                                await fetch('http://localhost:5000/api/student/config', {
+                                                    method: 'POST',
+                                                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                                                    body: JSON.stringify({ regularMenu: updatedRegular })
+                                                });
+                                                setRegularMenu(updatedRegular);
+                                                alert(`Menu for ${activeDay} ${activeMenuSession} published successfully! 📢`);
+                                            } catch (err) { }
+                                            setLoading(false);
+                                        }}
+                                        className="arena-btn"
+                                        style={{
+                                            flex: 2,
+                                            padding: '1rem',
+                                            fontSize: '1rem',
+                                            background: isPublished ? 'rgba(34,197,94,0.15)' : 'var(--grad-premium)',
+                                            border: isPublished ? '1px solid #22c55e' : 'none',
+                                            color: isPublished ? '#22c55e' : 'white'
+                                        }}
+                                        disabled={loading || !weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish}
+                                    >
+                                        {isPublished ? '✅ Menu is LIVE' : `📢 Publish ${activeDay.toUpperCase()} Menu`}
+                                    </button>
+                                );
+                            })()}
+                            <button
+                                onClick={async () => {
+                                    setLoading(true);
+                                    try {
+                                        const isClosing = !regularMenu[activeMenuSession].isClosed;
+                                        const updatedMenu = {
+                                            ...regularMenu,
+                                            [activeMenuSession]: {
+                                                ...regularMenu[activeMenuSession],
+                                                isClosed: isClosing
+                                            },
+                                            lastUpdated: new Date()
+                                        };
+                                        await fetch('http://localhost:5000/api/student/config', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                                            body: JSON.stringify({ regularMenu: updatedMenu })
+                                        });
+                                        setRegularMenu(updatedMenu);
+                                        alert(`${activeMenuSession.toUpperCase()} session ${isClosing ? 'CLOSED' : 'OPENED'}!`);
+                                    } catch (err) { }
+                                    setLoading(false);
+                                }}
+                                className={`arena-btn ${regularMenu[activeMenuSession]?.isClosed ? 'btn-secondary' : ''}`}
+                                style={{
+                                    flex: 1,
+                                    padding: '1rem',
+                                    borderColor: regularMenu[activeMenuSession]?.isClosed ? '#22c55e' : '#ef4444',
+                                    color: regularMenu[activeMenuSession]?.isClosed ? '#22c55e' : '#ef4444'
+                                }}
+                                disabled={loading}
+                            >
+                                {regularMenu[activeMenuSession]?.isClosed ? '🟢 Open' : '🛑 Close'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Status Bar */}
+                <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                    {['breakfast', 'lunch', 'dinner'].map(s => (
+                        <div key={s} style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
+                            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: regularMenu[s]?.isClosed ? '#ef4444' : '#22c55e' }} />
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'capitalize' }}>{s}: {regularMenu[s]?.isClosed ? 'Closed' : 'Active'}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            {/* Status Badges (Always visible for context) */}
+            <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                {['breakfast', 'lunch', 'dinner'].map(s => (
+                    <span key={s} style={{
+                        padding: '4px 14px',
+                        borderRadius: '20px',
+                        fontSize: '0.73rem',
+                        fontWeight: 'bold',
+                        background: regularMenu[s]?.isClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                        color: regularMenu[s]?.isClosed ? '#ef4444' : '#22c55e',
+                        border: `1px solid ${regularMenu[s]?.isClosed ? '#ef444433' : '#22c55e33'}`,
+                        textTransform: 'capitalize'
+                    }}>
+                        {regularMenu[s]?.isClosed ? '🛑' : '🟢'} {s}
+                    </span>
+                ))}
+                {config.feeStructureType === 'Separate' && (
+                    <span
+                        onClick={async () => {
+                            setLoading(true);
+                            try {
+                                const res = await fetch('http://localhost:5000/api/student/config', {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                    },
+                                    body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                });
+                                if (res.ok) {
+                                    setSpecialFoodClosed(!specialFoodClosed);
+                                    alert(!specialFoodClosed ? 'Special Tokens CLOSED! 🛑' : 'Special Tokens OPENED! 🟢');
+                                }
+                            } catch (err) { }
+                            setLoading(false);
+                        }}
+                        style={{
+                            padding: '4px 14px',
+                            borderRadius: '20px',
+                            fontSize: '0.73rem',
+                            fontWeight: 'bold',
+                            background: specialFoodClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
+                            color: specialFoodClosed ? '#ef4444' : '#22c55e',
+                            border: `1px solid ${specialFoodClosed ? '#ef444433' : '#22c55e33'}`,
+                            cursor: 'pointer'
+                        }}
+                    >
+                        {specialFoodClosed ? '🛑' : '🟢'} Special Tokens (click to toggle)
+                    </span>
+                )}
+            </div>
+
+            {/* Weekly Master Menu Plan (Editing Interface) */}
+            <div className="arena-card animate-slide-up">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <div>
+                        <h3 className="section-title" style={{ marginBottom: '4px' }}>📅 Weekly Master Menu Plan</h3>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                            Set the fixed menu for each day of the week. This is your master template.
+                        </p>
+                    </div>
+                    {!isEditingPlan && (
+                        <button
+                            onClick={() => setIsEditingPlan(true)}
+                            className="arena-btn"
+                            style={{ padding: '0.6rem 1.2rem', fontSize: '0.85rem', background: 'rgba(59,130,246,0.1)', color: 'var(--accent-blue)', border: '1px solid var(--accent-blue)' }}
+                        >
+                            ✏️ Edit Plan
+                        </button>
+                    )}
+                </div>
+
+                {/* Day Selection Tabs for Planning */}
+                <div style={{ display: 'flex', gap: '4px', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                    {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(day => (
+                        <button
+                            key={day}
+                            onClick={() => setActiveDay(day)}
+                            style={{
+                                padding: '0.5rem 1rem',
+                                borderRadius: '8px',
+                                background: activeDay === day ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                                color: activeDay === day ? 'white' : 'var(--text-muted)',
+                                border: 'none',
+                                cursor: 'pointer',
+                                fontSize: '0.8rem',
+                                textTransform: 'capitalize',
+                                transition: 'all 0.2s'
+                            }}
+                        >
+                            {day.slice(0, 3)}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Session Selection for Weekly Plan - reusing activeMenuSession for simplicity or separate state?
+                            Let's reuse activeMenuSession since user is likely focusing on one day/session at a time across both cards.
+                            Or separate state? Reusing is simpler for user mental model: "I am working on Monday Breakfast".
+                        */}
                 <div style={{ display: 'flex', gap: '0', marginBottom: '1.5rem', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.08)' }}>
                     {['breakfast', 'lunch', 'dinner'].map(s => {
                         const colors = { breakfast: '#fbbf24', lunch: '#3b82f6', dinner: '#a855f7' };
                         const icons = { breakfast: '🍳', lunch: '🍛', dinner: '🍱' };
                         const isActive = activeMenuSession === s;
-                        // Check if this session is closed (ONLY relevant if activeDay is Today)
-                        const isDayToday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay;
-                        const isClosed = isDayToday && regularMenu[s]?.isClosed;
-
                         return (
                             <button
                                 key={s}
@@ -2210,212 +2575,206 @@ const MessManagementModule = () => {
                                 }}
                             >
                                 {icons[s]} {s}
-                                {isClosed && (
-                                    <span style={{ fontSize: '0.55rem', background: 'rgba(239,68,68,0.2)', color: '#ef4444', padding: '1px 6px', borderRadius: '8px' }}>CLOSED</span>
-                                )}
                             </button>
                         );
                     })}
                 </div>
 
-                {/* Menu Input */}
-                <form onSubmit={async (e) => {
-                    e.preventDefault();
-                    setLoading(true);
-
-                    const isToday = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay;
-                    const sessionData = weeklyMenu[activeDay][activeMenuSession];
-
-                    try {
-                        // 1. Save to Weekly Menu
-                        const updatedWeekly = { ...weeklyMenu };
-                        // Ensure object exists
-                        if (!updatedWeekly[activeDay]) updatedWeekly[activeDay] = {};
-                        if (!updatedWeekly[activeDay][activeMenuSession]) updatedWeekly[activeDay][activeMenuSession] = {};
-
-                        // Inputs are bound to weeklyMenu state directly now? 
-                        // Wait, inputs below need to be bound to state. 
-                        // Let's bind inputs to weeklyMenu directly for simplicity, then this submit just pushes it.
-                        // Actually, duplicate state is bad. Let's assume on change we update weeklyMenu.
-
-                        await fetch('http://localhost:5000/api/student/config', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
-                            body: JSON.stringify({ weeklyMenu })
-                        });
-
-                        // 2. If Today, Update Regular Menu (Live)
-                        if (isToday) {
-                            const updatedRegular = {
-                                ...regularMenu,
-                                [activeMenuSession]: {
-                                    ...regularMenu[activeMenuSession],
-                                    mainDish: weeklyMenu[activeDay][activeMenuSession].mainDish,
-                                    sideDish: weeklyMenu[activeDay][activeMenuSession].sideDish
-                                },
-                                lastUpdated: new Date()
-                            };
-                            await fetch('http://localhost:5000/api/student/config', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
-                                body: JSON.stringify({ regularMenu: updatedRegular })
-                            });
-                            setRegularMenu(updatedRegular);
-                            setMenuPublished(true);
-                        }
-
-                        alert(isToday ? 'Menu Published & Saved to Weekly Plan! ✅' : 'Weekly Plan Updated! 💾');
-
-                    } catch (err) { }
-                    setLoading(false);
-                }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-
-                    <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                        <div>
-                            <label className="field-label">Main Dish ({activeDay})</label>
-                            <input
-                                type="text"
-                                className="arena-input"
-                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish || ''}
-                                onChange={e => {
-                                    setWeeklyMenu({
-                                        ...weeklyMenu,
-                                        [activeDay]: {
-                                            ...weeklyMenu[activeDay],
-                                            [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], mainDish: e.target.value }
-                                        }
-                                    });
-                                    setMenuPublished(false);
-                                }}
-                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Idly' : 'Rice'}`}
-                                required
-                            />
+                {!isEditingPlan ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', flex: 1 }}>
+                        <div style={{ background: 'rgba(34,197,94,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.1)' }}>
+                            <span style={{ fontSize: '0.6rem', color: '#22c55e', display: 'block', marginBottom: '2px', textTransform: 'uppercase', fontWeight: 'bold' }}>Veg</span>
+                            <p style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '2px' }}>{weeklyMenu[activeDay]?.[activeMenuSession]?.vegMain || weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish || '---'}</p>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>+ {weeklyMenu[activeDay]?.[activeMenuSession]?.vegSide || weeklyMenu[activeDay]?.[activeMenuSession]?.sideDish || '---'}</p>
                         </div>
-                        <div>
-                            <label className="field-label">Side Dish ({activeDay})</label>
+                        <div style={{ background: 'rgba(239,68,68,0.03)', padding: '1rem', borderRadius: '8px', border: '1px solid rgba(239,68,68,0.1)' }}>
+                            <span style={{ fontSize: '0.6rem', color: '#ef4444', display: 'block', marginBottom: '2px', textTransform: 'uppercase', fontWeight: 'bold' }}>Non-Veg</span>
+                            <p style={{ fontSize: '1rem', fontWeight: 'bold', marginBottom: '2px' }}>{weeklyMenu[activeDay]?.[activeMenuSession]?.nonVegMain || '---'}</p>
+                            <p style={{ fontSize: '0.75rem', opacity: 0.6 }}>+ {weeklyMenu[activeDay]?.[activeMenuSession]?.nonVegSide || '---'}</p>
+                        </div>
+                    </div>
+                ) : (
+                    <div style={{ gridColumn: 'span 2', display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1.5rem', background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '12px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <h4 style={{ fontSize: '0.8rem', color: '#22c55e', textTransform: 'uppercase' }}>Veg Selection</h4>
                             <input
                                 type="text"
                                 className="arena-input"
-                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.sideDish || ''}
-                                onChange={e => {
-                                    setWeeklyMenu({
-                                        ...weeklyMenu,
-                                        [activeDay]: {
-                                            ...weeklyMenu[activeDay],
-                                            [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], sideDish: e.target.value }
-                                        }
-                                    });
-                                    setMenuPublished(false);
-                                }}
-                                placeholder={`e.g. ${activeMenuSession === 'breakfast' ? 'Sambar' : 'Curry'}`}
-                                required
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.vegMain || ''}
+                                placeholder="Veg Main Dish..."
+                                onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], vegMain: e.target.value } } })}
+                            />
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.vegSide || ''}
+                                placeholder="Veg Side Dish..."
+                                onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], vegSide: e.target.value } } })}
+                            />
+                            <div style={{ borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '0.5rem' }}>
+                                <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>Compatibility Legacy Fields:</span>
+                                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '4px' }}>
+                                    <input type="text" className="arena-input" style={{ fontSize: '0.7rem', padding: '4px 8px' }} value={weeklyMenu[activeDay]?.[activeMenuSession]?.mainDish || ''} placeholder="Main..." onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], mainDish: e.target.value } } })} />
+                                    <input type="text" className="arena-input" style={{ fontSize: '0.7rem', padding: '4px 8px' }} value={weeklyMenu[activeDay]?.[activeMenuSession]?.sideDish || ''} placeholder="Side..." onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], sideDish: e.target.value } } })} />
+                                </div>
+                            </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <h4 style={{ fontSize: '0.8rem', color: '#ef4444', textTransform: 'uppercase' }}>Non-Veg Selection</h4>
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.nonVegMain || ''}
+                                placeholder="Non-Veg Main Dish..."
+                                onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], nonVegMain: e.target.value } } })}
+                            />
+                            <input
+                                type="text"
+                                className="arena-input"
+                                value={weeklyMenu[activeDay]?.[activeMenuSession]?.nonVegSide || ''}
+                                placeholder="Non-Veg Side Dish..."
+                                onChange={e => setWeeklyMenu({ ...weeklyMenu, [activeDay]: { ...weeklyMenu[activeDay], [activeMenuSession]: { ...weeklyMenu[activeDay][activeMenuSession], nonVegSide: e.target.value } } })}
                             />
                         </div>
                     </div>
+                )}
 
-                    {/* Actions */}
-                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-
-                        {/* Publish Button */}
+                {isEditingPlan && (
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                         <button
-                            type="submit"
-                            className="arena-btn"
-                            style={{
-                                padding: '0.7rem 1.5rem',
-                                background: menuPublished ? 'rgba(34,197,94,0.2)' : '',
-                                color: menuPublished ? '#22c55e' : '',
-                                borderColor: menuPublished ? 'rgba(34,197,94,0.3)' : ''
-                            }}
-                            disabled={loading}
-                        >
-                            {menuPublished ? '✅ Published' : '🍙 Publish Menu'}
-                        </button>
-
-                        {/* Close Session (Only visible if Today) */}
-                        {['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'][new Date().getDay()] === activeDay && (
-                            <button
-                                type="button"
-                                onClick={async () => {
-                                    setLoading(true);
-                                    try {
-                                        const isClosing = !regularMenu[activeMenuSession].isClosed;
-                                        // If closing, clear the LIVE regular menu, but NOT the weekly plan?
-                                        // User said "close the session". Usually means live session.
-                                        // Clearing fields in regularMenu is consistent with previous logic.
-
-                                        const updatedMenu = {
-                                            ...regularMenu,
-                                            [activeMenuSession]: {
-                                                ...regularMenu[activeMenuSession],
-                                                isClosed: isClosing,
-                                                ...(isClosing ? { mainDish: '', sideDish: '' } : {})
-                                            },
-                                            lastUpdated: new Date()
-                                        };
-
-                                        // We also might want to clear the inputs if they are bound to weeklyMenu?
-                                        // No, "Close" is a temporary daily operation. Weekly plan should remain.
-                                        // But if we clear mainDish/sideDish in regularMenu, the inputs (bound to weeklyMenu) will still show values.
-                                        // This implies separation of concerns.
-                                        // If user Closes session, the inputs shoud ideally reflect that?
-                                        // But inputs are bound to `weeklyMenu`.
-                                        // If I close the session, it means "Today's session is closed".
-                                        // The Weekly Plan for "Monday" (Today) remains "Idly/Sambar".
-
-                                        // Implementation Choice:
-                                        // "Close Session" affects ONLY the Live Status.
-                                        // The inputs will still show the planned menu.
-                                        // This is correct because "Weekly Plan" is the master. "Close" is an override.
-
-                                        await fetch('http://localhost:5000/api/student/config', {
-                                            method: 'POST',
-                                            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
-                                            body: JSON.stringify({ regularMenu: updatedMenu })
-                                        });
-
-                                        setRegularMenu(updatedMenu);
-                                        const label = activeMenuSession.charAt(0).toUpperCase() + activeMenuSession.slice(1);
-                                        alert(updatedMenu[activeMenuSession].isClosed ? `${label} session CLOSED! 🛑` : `${label} session OPENED! 🟢`);
-
-                                    } catch (err) { }
-                                    setLoading(false);
-                                }}
-                                className="arena-btn"
-                                style={{
-                                    padding: '0.7rem 1.2rem',
-                                    fontSize: '0.8rem',
-                                    background: regularMenu[activeMenuSession].isClosed ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                                    color: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444',
-                                    borderColor: regularMenu[activeMenuSession].isClosed ? '#22c55e' : '#ef4444'
-                                }}
-                                disabled={loading}
-                            >
-                                {regularMenu[activeMenuSession].isClosed ? '🟢 Open Session' : '🛑 Close Session'}
-                            </button>
-                        )}
-                    </div>
-                </form>
-
-                {/* Status Badges (Always visible for context) */}
-                <div style={{ marginTop: '1.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.6rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-                    {['breakfast', 'lunch', 'dinner'].map(s => (
-                        <span key={s} style={{
-                            padding: '4px 14px',
-                            borderRadius: '20px',
-                            fontSize: '0.73rem',
-                            fontWeight: 'bold',
-                            background: regularMenu[s].isClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                            color: regularMenu[s].isClosed ? '#ef4444' : '#22c55e',
-                            border: `1px solid ${regularMenu[s].isClosed ? '#ef444433' : '#22c55e33'}`,
-                            textTransform: 'capitalize'
-                        }}>
-                            {/* Only show Closed status if it's the current day? Or always live status? Always live status is safer info. */}
-                            {regularMenu[s].isClosed ? '🛑' : '🟢'} {s}
-                        </span>
-                    ))}
-                    {config.feeStructureType === 'Separate' && (
-                        <span
                             onClick={async () => {
+                                setLoading(true);
+                                try {
+                                    await fetch('http://localhost:5000/api/student/config', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
+                                        body: JSON.stringify({ weeklyMenu })
+                                    });
+                                    setIsEditingPlan(false);
+                                    alert('Weekly Plan Saved! 💾');
+                                } catch (err) { }
+                                setLoading(false);
+                            }}
+                            className="arena-btn"
+                            style={{ padding: '0.7rem 1.5rem' }}
+                        >
+                            💾 Save All Changes
+                        </button>
+                        <button
+                            onClick={() => {
+                                const currentSessionMenu = weeklyMenu[activeDay][activeMenuSession];
+                                const newWeekly = { ...weeklyMenu };
+                                ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].forEach(day => {
+                                    newWeekly[day] = {
+                                        ...newWeekly[day],
+                                        [activeMenuSession]: { ...currentSessionMenu }
+                                    };
+                                });
+                                setWeeklyMenu(newWeekly);
+                                alert(`Copied ${activeMenuSession} menu to all days! 📋`);
+                            }}
+                            className="arena-btn"
+                            style={{ padding: '0.7rem 1.5rem', background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid rgba(255,255,255,0.1)' }}
+                        >
+                            📋 Copy to All Days
+                        </button>
+                        <button
+                            onClick={() => {
+                                setIsEditingPlan(false);
+                                fetchConfig(); // Revert to server data
+                            }}
+                            className="arena-btn btn-secondary"
+                            style={{ padding: '0.7rem 1.5rem', borderColor: 'var(--text-muted)', color: 'var(--text-muted)' }}
+                        >
+                            ❌ Cancel
+                        </button>
+                    </div>
+                )}
+            </div>
+
+
+
+
+            {/* SEPARATE MODE ONLY: Scheduling & Tokens */}
+            {
+                config.feeStructureType === 'Separate' && (
+                    <>
+                        {/* Master Food List Management */}
+                        <div className="arena-card animate-slide-up">
+                            <h3 className="section-title">Special Food Master List</h3>
+                            <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
+                                Add special foods here to make them available for scheduling.
+                            </p>
+                            <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+                                <input
+                                    type="text"
+                                    className="arena-input"
+                                    value={newFoodItem}
+                                    onChange={e => setNewFoodItem(e.target.value)}
+                                    placeholder="e.g. Chicken Biriyani..."
+                                    style={{ flex: 2, minWidth: '200px' }}
+                                />
+                                <select
+                                    className="arena-input"
+                                    style={{ flex: 1, minWidth: '120px' }}
+                                    value={newFoodDay}
+                                    onChange={e => setNewFoodDay(e.target.value)}
+                                >
+                                    <option value="everyday">Everyday</option>
+                                    <option value="monday">Monday</option>
+                                    <option value="tuesday">Tuesday</option>
+                                    <option value="wednesday">Wednesday</option>
+                                    <option value="thursday">Thursday</option>
+                                    <option value="friday">Friday</option>
+                                    <option value="saturday">Saturday</option>
+                                    <option value="sunday">Sunday</option>
+                                </select>
+                                <select
+                                    className="arena-input"
+                                    style={{ flex: 1, minWidth: '120px' }}
+                                    value={newFoodSession}
+                                    onChange={e => setNewFoodSession(e.target.value)}
+                                >
+                                    <option value="all">All Sessions</option>
+                                    <option value="breakfast">Breakfast</option>
+                                    <option value="lunch">Lunch</option>
+                                    <option value="dinner">Dinner</option>
+                                </select>
+                                <button onClick={handleAddFood} className="arena-btn" style={{ padding: '0 1.5rem' }}>Add Item</button>
+                            </div>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                {masterList.length === 0 ? (
+                                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No items in master list.</p>
+                                ) : masterList.map((item, idx) => {
+                                    // Handle migration of old string items
+                                    const foodObj = typeof item === 'string' ? { name: item, day: 'everyday', session: 'all' } : item;
+                                    return (
+                                        <div key={idx} style={{
+                                            background: 'rgba(59,130,246,0.1)',
+                                            color: 'var(--accent-blue)',
+                                            padding: '6px 14px',
+                                            borderRadius: '20px',
+                                            fontSize: '0.8rem',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '10px',
+                                            border: '1px solid rgba(59,130,246,0.2)'
+                                        }}>
+                                            <span style={{ fontWeight: 'bold' }}>{foodObj.name}</span>
+                                            <span style={{ opacity: 0.6, fontSize: '0.7rem', borderLeft: '1px solid currentColor', paddingLeft: '8px', textTransform: 'capitalize' }}>
+                                                {foodObj.day} • {foodObj.session}
+                                            </span>
+                                            <span onClick={() => handleRemoveFood(item)} style={{ cursor: 'pointer', fontWeight: 'bold', marginLeft: '4px' }}>×</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        <div className="arena-card animate-slide-up">
+                            <h3 className="section-title">Special Food Set (Scheduling)</h3>
+                            <form onSubmit={async (e) => {
+                                e.preventDefault();
                                 setLoading(true);
                                 try {
                                     const res = await fetch('http://localhost:5000/api/student/config', {
@@ -2424,243 +2783,320 @@ const MessManagementModule = () => {
                                             'Content-Type': 'application/json',
                                             'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
                                         },
-                                        body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                        body: JSON.stringify(specialFood)
                                     });
                                     if (res.ok) {
-                                        setSpecialFoodClosed(!specialFoodClosed);
-                                        alert(!specialFoodClosed ? 'Special Tokens CLOSED! 🛑' : 'Special Tokens OPENED! 🟢');
+                                        await fetchConfig();
+                                        alert('Special Food Scheduled Successfully! 🍗');
                                     }
                                 } catch (err) { }
                                 setLoading(false);
-                            }}
-                            style={{
-                                padding: '4px 14px',
-                                borderRadius: '20px',
-                                fontSize: '0.73rem',
-                                fontWeight: 'bold',
-                                background: specialFoodClosed ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                                color: specialFoodClosed ? '#ef4444' : '#22c55e',
-                                border: `1px solid ${specialFoodClosed ? '#ef444433' : '#22c55e33'}`,
-                                cursor: 'pointer'
-                            }}
-                        >
-                            {specialFoodClosed ? '🛑' : '🟢'} Special Tokens (click to toggle)
-                        </span>
-                    )}
-                </div>
-            </div>
+                            }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+                                    <div className="mobile-span-all" style={{ gridColumn: 'span 2' }}>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', marginBottom: '1.5rem' }}>
+                                            <div>
+                                                <label className="field-label">1. Target Day</label>
+                                                <select
+                                                    className="arena-input"
+                                                    value={specialFood.specialFoodDay}
+                                                    onChange={e => {
+                                                        const day = e.target.value;
+                                                        // Auto-fill logic for multiple items
+                                                        const matches = masterList.filter(item =>
+                                                            item.day === day &&
+                                                            item.session.toLowerCase() === specialFood.specialFoodSession.toLowerCase()
+                                                        ).map(m => m.name);
+                                                        setSpecialFood({
+                                                            ...specialFood,
+                                                            specialFoodDay: day,
+                                                            specialFoodNames: matches.length > 0 ? matches : specialFood.specialFoodNames
+                                                        });
+                                                    }}
+                                                    required
+                                                >
+                                                    <option value="">Select Day</option>
+                                                    {['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d => (
+                                                        <option key={d} value={d}>{d.charAt(0).toUpperCase() + d.slice(1)}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="field-label">2. Session Type</label>
+                                                <select
+                                                    className="arena-input"
+                                                    value={specialFood.specialFoodSession}
+                                                    onChange={e => {
+                                                        const session = e.target.value;
+                                                        // Auto-fill logic for multiple items
+                                                        const matches = masterList.filter(item =>
+                                                            item.day === specialFood.specialFoodDay &&
+                                                            item.session.toLowerCase() === session.toLowerCase()
+                                                        ).map(m => m.name);
+                                                        setSpecialFood({
+                                                            ...specialFood,
+                                                            specialFoodSession: session,
+                                                            specialFoodNames: matches.length > 0 ? matches : specialFood.specialFoodNames
+                                                        });
+                                                    }}
+                                                    required
+                                                >
+                                                    <option value="None">None (Deactivate)</option>
+                                                    <option value="Breakfast">Breakfast</option>
+                                                    <option value="Lunch">Lunch</option>
+                                                    <option value="Dinner">Dinner</option>
+                                                </select>
+                                            </div>
+                                        </div>
 
-            {/* SEPARATE MODE ONLY: Scheduling & Tokens */}
-            {config.feeStructureType === 'Separate' && (
-                <>
-                    {/* Master Food List Management */}
-                    <div className="arena-card animate-slide-up">
-                        <h3 className="section-title">Special Food Master List</h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-                            Add special foods here to make them available for scheduling.
-                        </p>
-                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem' }}>
-                            <input
-                                type="text"
-                                className="arena-input"
-                                value={newFoodItem}
-                                onChange={e => setNewFoodItem(e.target.value)}
-                                placeholder="e.g. Chicken Biriyani, Fried Rice..."
-                                style={{ flex: 1 }}
-                            />
-                            <button onClick={handleAddFood} className="arena-btn" style={{ padding: '0 1.5rem' }}>Add Item</button>
-                        </div>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                            {masterList.length === 0 ? (
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No items in master list.</p>
-                            ) : masterList.map(item => (
-                                <div key={item} style={{
-                                    background: 'rgba(59,130,246,0.1)',
-                                    color: 'var(--accent-blue)',
-                                    padding: '4px 12px',
-                                    borderRadius: '20px',
-                                    fontSize: '0.8rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px',
-                                    border: '1px solid rgba(59,130,246,0.2)'
-                                }}>
-                                    {item}
-                                    <span onClick={() => handleRemoveFood(item)} style={{ cursor: 'pointer', fontWeight: 'bold' }}>×</span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="arena-card animate-slide-up">
-                        <h3 className="section-title">Special Food Set (Scheduling)</h3>
-                        <form onSubmit={async (e) => {
-                            e.preventDefault();
-                            setLoading(true);
-                            try {
-                                const res = await fetch('http://localhost:5000/api/student/config', {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
-                                    },
-                                    body: JSON.stringify(specialFood)
-                                });
-                                if (res.ok) {
-                                    await fetchConfig();
-                                    alert('Special Food Scheduled Successfully! 🍗');
-                                }
-                            } catch (err) { }
-                            setLoading(false);
-                        }} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
-                                <div className="mobile-span-all" style={{ gridColumn: 'span 2' }}>
-                                    <label className="field-label">Special Food Name</label>
-                                    <select
-                                        className="arena-input"
-                                        value={specialFood.specialFoodName}
-                                        onChange={e => setSpecialFood({ ...specialFood, specialFoodName: e.target.value })}
-                                        required
-                                    >
-                                        <option value="">Select from Master List</option>
-                                        {masterList.map(item => (
-                                            <option key={item} value={item}>{item}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="field-label">Registration Date (DD.MM.YYYY)</label>
-                                    <input
-                                        type="text"
-                                        className="arena-input"
-                                        value={specialFood.specialFoodDate}
-                                        onChange={e => setSpecialFood({ ...specialFood, specialFoodDate: e.target.value })}
-                                        placeholder="e.g. 17.02.2026"
-                                        required
-                                    />
-                                </div>
-                                <div>
-                                    <label className="field-label">Providing Date (DD.MM.YYYY)</label>
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <input
-                                            type="text"
+                                        <label className="field-label">3. Select Special Foods to Publish</label>
+                                        <div style={{
+                                            background: 'rgba(255,255,255,0.02)',
+                                            border: '1px solid var(--border-main)',
+                                            borderRadius: '8px',
+                                            padding: '1rem',
+                                            display: 'flex',
+                                            flexWrap: 'wrap',
+                                            gap: '0.8rem'
+                                        }}>
+                                            {masterList
+                                                .map(item => (typeof item === 'string' ? { name: item, day: 'everyday', session: 'all' } : item))
+                                                .map((item, idx) => {
+                                                    const isSelected = specialFood.specialFoodNames.includes(item.name);
+                                                    return (
+                                                        <div
+                                                            key={idx}
+                                                            onClick={() => {
+                                                                const newNames = isSelected
+                                                                    ? specialFood.specialFoodNames.filter(n => n !== item.name)
+                                                                    : [...specialFood.specialFoodNames, item.name];
+                                                                setSpecialFood({ ...specialFood, specialFoodNames: newNames });
+                                                            }}
+                                                            style={{
+                                                                padding: '6px 12px',
+                                                                borderRadius: '6px',
+                                                                background: isSelected ? 'var(--accent-blue)' : 'rgba(255,255,255,0.05)',
+                                                                color: isSelected ? 'white' : 'var(--text-muted)',
+                                                                fontSize: '0.8rem',
+                                                                cursor: 'pointer',
+                                                                border: isSelected ? '1px solid var(--accent-blue)' : '1px solid rgba(255,255,255,0.1)',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '8px',
+                                                                transition: 'all 0.2s ease'
+                                                            }}
+                                                        >
+                                                            <span>{isSelected ? '✔' : '+'}</span>
+                                                            <strong>{item.name}</strong>
+                                                            <span style={{ fontSize: '0.65rem', opacity: 0.6 }}>({item.day} • {item.session})</span>
+                                                        </div>
+                                                    );
+                                                })
+                                            }
+                                            {masterList.length === 0 && (
+                                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Add items to Master List first.</p>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="field-label">Registration Date (DD.MM.YYYY)</label>
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <input
+                                                type="text"
+                                                className="arena-input"
+                                                value={specialFood.specialFoodDate}
+                                                onChange={e => setSpecialFood({ ...specialFood, specialFoodDate: e.target.value })}
+                                                placeholder="e.g. 17.02.2026"
+                                                style={{ flex: 1 }}
+                                                required
+                                            />
+                                            <input
+                                                type="date"
+                                                className="arena-input"
+                                                style={{ width: '45px', padding: '0 5px' }}
+                                                onChange={e => {
+                                                    const [y, m, d] = e.target.value.split('-');
+                                                    if (y && m && d) setSpecialFood({ ...specialFood, specialFoodDate: `${d}.${m}.${y}` });
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="field-label">Providing Date (DD.MM.YYYY)</label>
+                                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                                            <input
+                                                type="text"
+                                                className="arena-input"
+                                                value={specialFood.specialFoodProvidingDate}
+                                                onChange={e => setSpecialFood({ ...specialFood, specialFoodProvidingDate: e.target.value })}
+                                                placeholder="e.g. 18.02.2026"
+                                                style={{ flex: 1 }}
+                                                required
+                                            />
+                                            <input
+                                                type="date"
+                                                className="arena-input"
+                                                style={{ width: '45px', padding: '0 5px' }}
+                                                onChange={e => {
+                                                    const [y, m, d] = e.target.value.split('-');
+                                                    if (y && m && d) setSpecialFood({ ...specialFood, specialFoodProvidingDate: `${d}.${m}.${y}` });
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <label className="field-label">Session Type</label>
+                                        <select
                                             className="arena-input"
-                                            value={specialFood.specialFoodProvidingDate}
-                                            onChange={e => setSpecialFood({ ...specialFood, specialFoodProvidingDate: e.target.value })}
-                                            placeholder="e.g. 18.02.2026"
-                                            style={{ flex: 1 }}
+                                            value={specialFood.specialFoodSession}
+                                            onChange={e => setSpecialFood({ ...specialFood, specialFoodSession: e.target.value })}
                                             required
-                                        />
-                                        <input
-                                            type="date"
-                                            className="arena-input"
-                                            style={{ width: '45px', padding: '0 5px' }}
-                                            onChange={e => {
-                                                const [y, m, d] = e.target.value.split('-');
-                                                if (y && m && d) setSpecialFood({ ...specialFood, specialFoodProvidingDate: `${d}.${m}.${y}` });
-                                            }}
-                                        />
+                                        >
+                                            <option value="None">None (Deactivate)</option>
+                                            <option value="Breakfast">Breakfast</option>
+                                            <option value="Lunch">Lunch</option>
+                                            <option value="Dinner">Dinner</option>
+                                        </select>
                                     </div>
-                                </div>
-                                <div>
-                                    <label className="field-label">Session Type</label>
-                                    <select
-                                        className="arena-input"
-                                        value={specialFood.specialFoodSession}
-                                        onChange={e => setSpecialFood({ ...specialFood, specialFoodSession: e.target.value })}
-                                        required
-                                    >
-                                        <option value="None">None (Deactivate)</option>
-                                        <option value="Breakfast">Breakfast</option>
-                                        <option value="Lunch">Lunch</option>
-                                        <option value="Dinner">Dinner</option>
-                                    </select>
-                                </div>
-                                <TimePickerIST
-                                    label="Registration Start Time"
-                                    value={specialFood.specialFoodStartTime}
-                                    onChange={val => setSpecialFood({ ...specialFood, specialFoodStartTime: val })}
-                                />
-                                <TimePickerIST
-                                    label="Registration End Time"
-                                    value={specialFood.specialFoodEndTime}
-                                    onChange={val => setSpecialFood({ ...specialFood, specialFoodEndTime: val })}
-                                />
-                            </div>
-                            <div style={{ display: 'flex', gap: '1rem' }}>
-                                <button type="submit" className="arena-btn" style={{ flex: 1 }} disabled={loading}>
-                                    {loading ? 'Propagating Logic...' : '📅 Set Special Food Window'}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <div className="arena-card animate-slide-up">
-                        <h3 className="section-title">Token Billing Engine</h3>
-
-                        <div className="arena-card" style={{ marginBottom: '2rem', background: 'rgba(59,130,246,0.05)', border: '1.5px solid #3b82f644' }}>
-                            <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Pricing Calculator (Batch Update)</h4>
-                            <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div>
-                                    <label className="field-label">Total Spent (₹)</label>
-                                    <input
-                                        type="number"
-                                        className="arena-input"
-                                        value={stats.totalSpent}
-                                        onChange={e => setStats({ ...stats, totalSpent: e.target.value })}
-                                        placeholder="e.g. 5000"
+                                    <TimePickerIST
+                                        label="Registration Start Time"
+                                        value={specialFood.specialFoodStartTime}
+                                        onChange={val => setSpecialFood({ ...specialFood, specialFoodStartTime: val })}
+                                    />
+                                    <TimePickerIST
+                                        label="Registration End Time"
+                                        value={specialFood.specialFoodEndTime}
+                                        onChange={val => setSpecialFood({ ...specialFood, specialFoodEndTime: val })}
                                     />
                                 </div>
-                                <div>
-                                    <label className="field-label">Student Count</label>
-                                    <input
-                                        type="number"
-                                        className="arena-input"
-                                        value={stats.studentCount}
-                                        onChange={e => setStats({ ...stats, studentCount: e.target.value })}
-                                        placeholder="e.g. 100"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                                <div style={{ display: 'flex', gap: '1rem' }}>
+                                    {(() => {
+                                        const isSpecialPublished = config &&
+                                            JSON.stringify(specialFood.specialFoodNames.sort()) === JSON.stringify((config.specialFoodNames || []).sort()) &&
+                                            specialFood.specialFoodDate === config.specialFoodDate &&
+                                            specialFood.specialFoodProvidingDate === config.specialFoodProvidingDate &&
+                                            specialFood.specialFoodStartTime === config.specialFoodStartTime &&
+                                            specialFood.specialFoodEndTime === config.specialFoodEndTime &&
+                                            specialFood.specialFoodSession === config.specialFoodSession &&
+                                            specialFood.specialFoodDay === config.specialFoodDay;
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <h4 style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Active Special Tokens ({activeTokens?.length || 0})</h4>
-                            {(Array.isArray(activeTokens) ? activeTokens : []).length === 0 ? (
-                                <p style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No active tokens to process.</p>
-                            ) : (
-                                (Array.isArray(activeTokens) ? activeTokens : []).map(t => (
-                                    <div key={t._id} className="arena-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-main)' }}>
-                                        <div>
-                                            <strong style={{ color: 'var(--accent-blue)' }}>{t.student?.name}</strong>
-                                            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Roll: {t.student?.rollNo} | {t.tokenId}</p>
-                                            <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>{t.tokenType}</span>
-                                        </div>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        return (
                                             <button
-                                                onClick={() => handlePrintManualToken(t)}
-                                                className="arena-btn btn-secondary"
-                                                style={{ padding: '0.5rem', fontSize: '1.1rem', borderColor: '#a855f7', color: '#a855f7' }}
-                                                title="Print Manual Token"
-                                            >
-                                                🖨️
-                                            </button>
-                                            <button
-                                                onClick={() => handleCloseToken(t._id)}
+                                                type="submit"
                                                 className="arena-btn"
-                                                disabled={loading}
-                                                style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', background: 'rgba(34,197,94,0.2)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+                                                style={{
+                                                    flex: 1,
+                                                    background: isSpecialPublished ? 'rgba(34,197,94,0.15)' : 'var(--grad-premium)',
+                                                    border: isSpecialPublished ? '1px solid #22c55e' : 'none',
+                                                    color: isSpecialPublished ? '#22c55e' : 'white'
+                                                }}
+                                                disabled={loading || (isSpecialPublished && config.specialFoodName !== '')}
                                             >
-                                                ✔ Close & Bill
+                                                {loading ? 'Propagating Logic...' : (isSpecialPublished && specialFood.specialFoodNames.length > 0) ? `✅ ${specialFood.specialFoodNames.length} Specials are LIVE` : '📅 Set Special Food Window'}
                                             </button>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
+                                        );
+                                    })()}
+                                    <button
+                                        type="button"
+                                        onClick={async () => {
+                                            setLoading(true);
+                                            try {
+                                                const res = await fetch('http://localhost:5000/api/student/config', {
+                                                    method: 'POST',
+                                                    headers: {
+                                                        'Content-Type': 'application/json',
+                                                        'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                                    },
+                                                    body: JSON.stringify({ specialFoodClosed: !specialFoodClosed })
+                                                });
+                                                if (res.ok) {
+                                                    setSpecialFoodClosed(!specialFoodClosed);
+                                                    alert(!specialFoodClosed ? 'Special Tokens CLOSED! 🛑' : 'Special Tokens OPENED! 🟢');
+                                                }
+                                            } catch (err) { }
+                                            setLoading(false);
+                                        }}
+                                        className="arena-btn"
+                                        style={{
+                                            flex: 1,
+                                            background: specialFoodClosed ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
+                                            border: specialFoodClosed ? '1px solid #22c55e' : '1px solid #ef4444',
+                                            color: specialFoodClosed ? '#22c55e' : '#ef4444'
+                                        }}
+                                    >
+                                        {specialFoodClosed ? '🟢 Re-open Session' : '🛑 Close Session'}
+                                    </button>
+                                </div>
+                            </form>
                         </div>
-                    </div>
-                </>
-            )}
+
+                        <div className="arena-card animate-slide-up">
+                            <h3 className="section-title">Token Billing Engine</h3>
+
+                            <div className="arena-card" style={{ marginBottom: '2rem', background: 'rgba(59,130,246,0.05)', border: '1.5px solid #3b82f644' }}>
+                                <h4 style={{ fontSize: '0.9rem', marginBottom: '1rem' }}>Pricing Calculator (Batch Update)</h4>
+                                <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div>
+                                        <label className="field-label">Total Spent (₹)</label>
+                                        <input
+                                            type="number"
+                                            className="arena-input"
+                                            value={stats.totalSpent}
+                                            onChange={e => setStats({ ...stats, totalSpent: e.target.value })}
+                                            placeholder="e.g. 5000"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="field-label">Student Count</label>
+                                        <input
+                                            type="number"
+                                            className="arena-input"
+                                            value={stats.studentCount}
+                                            onChange={e => setStats({ ...stats, studentCount: e.target.value })}
+                                            placeholder="e.g. 100"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                                <h4 style={{ fontSize: '1rem', color: 'var(--text-muted)' }}>Active Special Tokens ({activeTokens?.length || 0})</h4>
+                                {(Array.isArray(activeTokens) ? activeTokens : []).length === 0 ? (
+                                    <p style={{ textAlign: 'center', padding: '2rem', opacity: 0.5 }}>No active tokens to process.</p>
+                                ) : (
+                                    (Array.isArray(activeTokens) ? activeTokens : []).map(t => (
+                                        <div key={t._id} className="arena-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', border: '1px solid var(--border-main)' }}>
+                                            <div>
+                                                <strong style={{ color: 'var(--accent-blue)' }}>{t.student?.name}</strong>
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Roll: {t.student?.rollNo} | {t.tokenId}</p>
+                                                <span style={{ fontSize: '0.65rem', padding: '2px 6px', background: 'rgba(255,255,255,0.05)', borderRadius: '4px' }}>{t.tokenType}</span>
+                                            </div>
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                <button
+                                                    onClick={() => handlePrintManualToken(t)}
+                                                    className="arena-btn btn-secondary"
+                                                    style={{ padding: '0.5rem', fontSize: '1.1rem', borderColor: '#a855f7', color: '#a855f7' }}
+                                                    title="Print Manual Token"
+                                                >
+                                                    🖨️
+                                                </button>
+                                                <button
+                                                    onClick={() => handleCloseToken(t._id)}
+                                                    className="arena-btn"
+                                                    disabled={loading}
+                                                    style={{ padding: '0.5rem 1rem', fontSize: '0.8rem', background: 'rgba(34,197,94,0.2)', color: '#22c55e', border: '1px solid rgba(34,197,94,0.3)' }}
+                                                >
+                                                    ✔ Close & Bill
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+                    </>
+                )
+            }
         </div>
     );
 };
@@ -2751,15 +3187,15 @@ const FeesModule = ({ studentId, initialFees }) => {
             <div className="responsive-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
                 <div className="arena-card" style={{ textAlign: 'center', background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Pending</p>
-                    <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>₹{fees.pending}</p>
-                    <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Total Due: ₹{fees.totalDue} ({fees.structure})</p>
+                    <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>₹{Math.round(fees.pending)}</p>
+                    <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Total Due: ₹{Math.round(fees.totalDue)} ({fees.structure})</p>
                     <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '4px' }}>
                         Hostel: {fees.hostelBillingCycle} | Mess: {fees.messBillingCycle}
                     </p>
                 </div>
                 <div className="arena-card" style={{ textAlign: 'center', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Paid</p>
-                    <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#22c55e' }}>₹{fees.paid}</p>
+                    <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#22c55e' }}>₹{Math.round(fees.paid)}</p>
                 </div>
             </div>
 

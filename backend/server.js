@@ -1,5 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const fs = require('fs');
+const path = require('path');
 const cors = require('cors');
 const dotenv = require('dotenv');
 
@@ -28,6 +30,9 @@ app.get('/', (req, res) => {
 
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url}`);
+    try {
+        fs.appendFileSync(path.join(__dirname, 'server_requests.log'), `${new Date().toISOString()} ${req.method} ${req.url}\n`);
+    } catch (e) { }
     next();
 });
 

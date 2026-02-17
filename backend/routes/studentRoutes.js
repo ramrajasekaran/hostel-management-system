@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const router = express.Router();
 const Leave = require('../models/Leave');
 const Complaint = require('../models/Complaint');
@@ -38,32 +40,51 @@ router.post('/config', authenticate, authorize('warden', 'admin', 'mess_warden')
         const {
             attendanceStart, attendanceEnd, collegeEndTime, curfewTime,
             specialFoodStartTime, specialFoodEndTime, specialFoodDate,
-            specialFoodName, specialFoodSession, specialFoodProvidingDate,
-            specialFoodMasterList, regularMenu
+            specialFoodName, specialFoodNames, specialFoodSession, specialFoodProvidingDate,
+            specialFoodDay, specialFoodMasterList, regularMenu, weeklyMenu
         } = req.body;
 
-        // If Mess Warden, only allow updating mess-related config
+        // Filter only provided fields to prevent overwriting with undefined
+        const allowedKeys = [
+            'attendanceStart', 'attendanceEnd', 'collegeEndTime', 'curfewTime',
+            'specialFoodStartTime', 'specialFoodEndTime', 'specialFoodDate',
+            'specialFoodName', 'specialFoodNames', 'specialFoodSession', 'specialFoodProvidingDate',
+            'specialFoodDay', 'specialFoodMasterList', 'regularMenu', 'weeklyMenu', 'specialFoodClosed',
+            'feeStructureType', 'hostelFee', 'fixedMessFee', 'commonFoodFee',
+            'hostelBillingCycle', 'messBillingCycle'
+        ];
+
         let updateData = {};
-        if (req.user.role === 'mess_warden') {
-            updateData = {
-                specialFoodStartTime, specialFoodEndTime, specialFoodDate,
-                specialFoodName, specialFoodSession, specialFoodProvidingDate,
-                specialFoodMasterList, regularMenu
-            };
-        } else {
-            updateData = {
-                attendanceStart, attendanceEnd, collegeEndTime, curfewTime,
-                specialFoodStartTime, specialFoodEndTime, specialFoodDate,
-                specialFoodName, specialFoodSession, specialFoodProvidingDate,
-                specialFoodMasterList, regularMenu
-            };
-        }
+        allowedKeys.forEach(key => {
+            if (req.body[key] !== undefined) {
+                // If Mess Warden, only allow mess-related fields
+                if (req.user.role === 'mess_warden') {
+                    const messFields = [
+                        'specialFoodStartTime', 'specialFoodEndTime', 'specialFoodDate',
+                        'specialFoodName', 'specialFoodNames', 'specialFoodSession', 'specialFoodProvidingDate',
+                        'specialFoodDay', 'specialFoodMasterList', 'regularMenu', 'weeklyMenu', 'specialFoodClosed'
+                    ];
+                    if (messFields.includes(key)) {
+                        updateData[key] = req.body[key];
+                    }
+                } else {
+                    updateData[key] = req.body[key];
+                }
+            }
+        });
 
         const config = await SystemConfig.findOneAndUpdate(
             { key: 'main_security' },
             { ...updateData, updatedAt: Date.now() },
             { new: true, upsert: true }
         );
+
+        // Notify all clients about the configuration update
+        const io = req.app.get('socketio');
+        if (io) {
+            io.emit('config_update', config);
+        }
+
         res.json(config);
     } catch (err) {
         res.status(500).json({ message: 'Error updating configuration' });
@@ -892,19 +913,29 @@ router.get('/fees/summary/:studentId', async (req, res) => {
 router.post('/mess/token/generate', authenticate, authorize('student'), async (req, res) => {
 
     try {
-        const { studentId, tokenType } = req.body;
+        const { studentId, tokenType, foodName } = req.body;
         const config = await getSystemConfig();
+
+        const todayStr = getTodayDateStr();
+        const now = new Date();
+        const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
+
+        // EARLY LOGGING
+        const logMsg = `[TOKEN GEN] Incoming Request: Student=${studentId}, Food=${foodName}\n` +
+            `[TOKEN GEN] Server Time: ${todayStr} ${now.getHours()}:${now.getMinutes()} (${currentTimeMinutes} mins)\n` +
+            `[TOKEN GEN] Config: Date=${config.specialFoodDate}, Start=${config.specialFoodStartTime}, End=${config.specialFoodEndTime}, Session=${config.specialFoodSession}\n`;
+        fs.appendFileSync(path.join(__dirname, '../debug_token.log'), logMsg);
+
 
         // 🛡️ Logic: Special Token Registration Window Enforcement
         if (config.specialFoodSession !== 'None') {
-            const todayStr = getTodayDateStr();
-            const now = new Date();
-            const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
             const startMinutes = timeToMinutes(config.specialFoodStartTime);
-            const endMinutes = timeToMinutes(config.specialFoodEndTime);
+            let endMinutes = timeToMinutes(config.specialFoodEndTime);
+            if (endMinutes === 0) endMinutes = 1440; // Handle 00:00 as 24:00 (midnight)
 
             // Check Date
             if (todayStr !== config.specialFoodDate) {
+                fs.appendFileSync(path.join(__dirname, '../debug_token.log'), `[TOKEN GEN] Date mismatch: Today=${todayStr} vs Config=${config.specialFoodDate}\n`);
                 return res.status(403).json({
                     message: `Registration for ${config.specialFoodName} is only available on ${config.specialFoodDate}.`
                 });
@@ -912,6 +943,7 @@ router.post('/mess/token/generate', authenticate, authorize('student'), async (r
 
             // Check Time
             if (currentTimeMinutes < startMinutes || currentTimeMinutes > endMinutes) {
+                fs.appendFileSync(path.join(__dirname, '../debug_token.log'), `[TOKEN GEN] Time invalid: Now=${currentTimeMinutes} vs Window=${startMinutes}-${endMinutes}\n`);
                 return res.status(403).json({
                     message: `Registration for ${config.specialFoodName} is closed. Available: ${config.specialFoodStartTime} - ${config.specialFoodEndTime}.`,
                 });
@@ -926,10 +958,13 @@ router.post('/mess/token/generate', authenticate, authorize('student'), async (r
             // This suggests that when NOT set, maybe they can't register special tokens at all.
         }
 
+        // Validate foodName if provided, else fallback to legacy
+        const finalFoodName = foodName || config.specialFoodName;
+
         const token = new SpecialToken({
             student: studentId,
             tokenType,
-            foodName: config.specialFoodName,
+            foodName: finalFoodName,
             sessionType: config.specialFoodSession,
             providingDate: config.specialFoodProvidingDate
         });
