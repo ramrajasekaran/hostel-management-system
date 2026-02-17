@@ -2195,9 +2195,14 @@ const MessManagementModule = () => {
                             onClick={async () => {
                                 setLoading(true);
                                 try {
+                                    const isClosing = !regularMenu[activeMenuSession].isClosed;
                                     const updatedMenu = {
                                         ...regularMenu,
-                                        [activeMenuSession]: { ...regularMenu[activeMenuSession], isClosed: !regularMenu[activeMenuSession].isClosed },
+                                        [activeMenuSession]: {
+                                            ...regularMenu[activeMenuSession],
+                                            isClosed: isClosing,
+                                            ...(isClosing ? { mainDish: '', sideDish: '' } : {})
+                                        },
                                         lastUpdated: new Date()
                                     };
                                     const res = await fetch('http://localhost:5000/api/student/config', {
