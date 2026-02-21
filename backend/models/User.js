@@ -79,6 +79,18 @@ const userSchema = new mongoose.Schema({
         type: Number,
         default: 0
     },
+    hostelFees: {
+        paid: {
+            type: Number,
+            default: 0
+        }
+    },
+    messFees: {
+        paid: {
+            type: Number,
+            default: 0
+        }
+    },
     attendanceStatus: {
         type: String,
         enum: ['Present', 'Absent', 'Out'],

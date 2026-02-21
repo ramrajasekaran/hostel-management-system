@@ -168,6 +168,14 @@ const systemConfigSchema = new mongoose.Schema({
         type: Boolean,
         default: false
     },
+    lastAutoBlockDate: {
+        type: String, // YYYY-MM-DD
+        default: ''
+    },
+    lastResetDate: {
+        type: String, // YYYY-MM-DD
+        default: ''
+    },
     updatedAt: {
         type: Date,
         default: Date.now

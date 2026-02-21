@@ -62,7 +62,9 @@ router.post('/config', authenticate, authorize('warden', 'admin', 'mess_warden')
                     const messFields = [
                         'specialFoodStartTime', 'specialFoodEndTime', 'specialFoodDate',
                         'specialFoodName', 'specialFoodNames', 'specialFoodSession', 'specialFoodProvidingDate',
-                        'specialFoodDay', 'specialFoodMasterList', 'regularMenu', 'weeklyMenu', 'specialFoodClosed'
+                        'specialFoodDay', 'specialFoodMasterList', 'regularMenu', 'weeklyMenu', 'specialFoodClosed',
+                        'feeStructureType', 'hostelFee', 'fixedMessFee', 'commonFoodFee',
+                        'hostelBillingCycle', 'messBillingCycle'
                     ];
                     if (messFields.includes(key)) {
                         updateData[key] = req.body[key];
@@ -160,7 +162,7 @@ router.post('/leave/approve/warden', authenticate, authorize('warden', 'admin', 
 });
 
 // Simulation: Parent Approval (Advanced 5)
-router.post('/leave/approve/parent', async (req, res) => {
+router.post('/leave/approve/parent', authenticate, authorize('warden', 'hostel_warden', 'admin', 'parent'), async (req, res) => {
     try {
         const { leaveId, status } = req.body;
         const leave = await Leave.findById(leaveId);
@@ -513,7 +515,9 @@ router.post('/attendance/mark', async (req, res) => {
         const startMinutes = timeToMinutes(config.attendanceStart);
         const endMinutes = timeToMinutes(config.attendanceEnd);
 
-        if (currentTimeMinutes < startMinutes || currentTimeMinutes > endMinutes) {
+        const { manual } = req.body;
+
+        if (!manual && (currentTimeMinutes < startMinutes || currentTimeMinutes > endMinutes)) {
             return res.status(403).json({
                 message: `Attendance window is closed. Daily scanning is only allowed between ${config.attendanceStart} and ${config.attendanceEnd}.`,
                 window: `${config.attendanceStart} - ${config.attendanceEnd}`
@@ -843,7 +847,7 @@ router.get('/fees/history/:studentId', async (req, res) => {
 // @desc    Update fee structure type (Warden only)
 router.post('/fees/structure', authenticate, authorize('warden', 'admin', 'mess_warden'), async (req, res) => {
     try {
-        const { type, hostelFee, fixedMessFee, commonFoodFee } = req.body;
+        const { type, hostelFee, fixedMessFee, commonFoodFee, hostelBillingCycle, messBillingCycle } = req.body;
         console.log('FEE UPDATE REQUEST:', req.body);
 
         const updateData = {};
@@ -851,6 +855,8 @@ router.post('/fees/structure', authenticate, authorize('warden', 'admin', 'mess_
         if (hostelFee !== undefined && hostelFee !== '') updateData.hostelFee = Number(hostelFee);
         if (fixedMessFee !== undefined && fixedMessFee !== '') updateData.fixedMessFee = Number(fixedMessFee);
         if (commonFoodFee !== undefined && commonFoodFee !== '') updateData.commonFoodFee = Number(commonFoodFee);
+        if (hostelBillingCycle) updateData.hostelBillingCycle = hostelBillingCycle;
+        if (messBillingCycle) updateData.messBillingCycle = messBillingCycle;
 
         console.log('FEE UPDATE DATA:', updateData);
 
@@ -862,6 +868,13 @@ router.post('/fees/structure', authenticate, authorize('warden', 'admin', 'mess_
             { new: true, upsert: true }
         );
         console.log('FEE UPDATE SUCCESS:', config);
+
+        // Notify all clients about the structure update
+        const io = req.app.get('socketio');
+        if (io) {
+            io.emit('config_update', config);
+        }
+
         res.json(config);
     } catch (err) {
         console.error('FEE UPDATE ERROR:', err);
@@ -878,27 +891,76 @@ router.get('/fees/summary/:studentId', async (req, res) => {
 
         const config = await getSystemConfig();
 
-        let totalDue = config.hostelFee;
+        let hostelDue = Math.round(config.hostelFee || 0);
+        let messDue = 0;
+
         if (config.feeStructureType === 'Common') {
-            totalDue += config.fixedMessFee;
+            messDue = Math.round(config.fixedMessFee || 0);
         } else {
-            totalDue += config.commonFoodFee;
+            messDue = Math.round(config.commonFoodFee || 0);
             // Add Special Tokens (Closed/Billed ones)
             const tokens = await SpecialToken.find({ student: student._id, status: 'Closed' });
             const tokenTotal = tokens.reduce((sum, t) => sum + (t.price || 0), 0);
-            totalDue += tokenTotal;
+            messDue += Math.round(tokenTotal);
         }
 
-        const pending = Math.max(0, totalDue - student.feesPaid);
+        const fees = await Fee.find({ student: student._id, status: 'Success' });
 
-        // Auto-update student's feesBalance
-        student.feesBalance = pending;
+        let hostelPaid = fees.reduce((sum, f) => {
+            if (f.feeType === 'Hostel') return sum + f.amount;
+            if (f.feeType === 'Both') return sum + (f.hostelAmount || 0);
+            return sum;
+        }, 0);
+
+        let messPaid = fees.reduce((sum, f) => {
+            if (f.feeType === 'Mess') return sum + f.amount;
+            if (f.feeType === 'Both') return sum + (f.messAmount || 0);
+            return sum;
+        }, 0);
+
+        // Handle possible legacy/manual adjustments in student.feesPaid not yet in Fee records
+        // For simplicity, we'll assume Fee records are the source of truth now, but we'll include a check.
+        const totalPaidByRecords = hostelPaid + messPaid;
+        if (student.feesPaid > totalPaidByRecords) {
+            const difference = student.feesPaid - totalPaidByRecords;
+            // Allot extra/legacy payments to hostel first
+            const toHostel = Math.min(difference, Math.max(0, hostelDue - hostelPaid));
+            hostelPaid += toHostel;
+            messPaid += (difference - toHostel);
+        }
+
+        const totalDue = hostelDue + messDue;
+        const totalPaid = hostelPaid + messPaid;
+        const hostelPending = Math.max(0, hostelDue - hostelPaid);
+        const messPending = Math.max(0, messDue - messPaid);
+        const totalPending = hostelPending + messPending;
+
+        // Auto-update student's feesBalance and SPLIT fields
+        student.feesBalance = totalPending;
+
+        // Sync calculated values to persistence layer
+        if (!student.hostelFees) student.hostelFees = {};
+        if (!student.messFees) student.messFees = {};
+
+        student.hostelFees.paid = hostelPaid;
+        student.messFees.paid = messPaid;
+
         await student.save();
 
         res.json({
             totalDue,
-            feesPaid: student.feesPaid,
-            feesPending: pending,
+            feesPaid: totalPaid,
+            feesPending: totalPending,
+            hostel: {
+                due: hostelDue,
+                paid: hostelPaid,
+                pending: hostelPending
+            },
+            mess: {
+                due: messDue,
+                paid: messPaid,
+                pending: messPending
+            },
             structure: config.feeStructureType
         });
     } catch (err) {
@@ -920,13 +982,6 @@ router.post('/mess/token/generate', authenticate, authorize('student'), async (r
         const now = new Date();
         const currentTimeMinutes = now.getHours() * 60 + now.getMinutes();
 
-        // EARLY LOGGING
-        const logMsg = `[TOKEN GEN] Incoming Request: Student=${studentId}, Food=${foodName}\n` +
-            `[TOKEN GEN] Server Time: ${todayStr} ${now.getHours()}:${now.getMinutes()} (${currentTimeMinutes} mins)\n` +
-            `[TOKEN GEN] Config: Date=${config.specialFoodDate}, Start=${config.specialFoodStartTime}, End=${config.specialFoodEndTime}, Session=${config.specialFoodSession}\n`;
-        fs.appendFileSync(path.join(__dirname, '../debug_token.log'), logMsg);
-
-
         // 🛡️ Logic: Special Token Registration Window Enforcement
         if (config.specialFoodSession !== 'None') {
             const startMinutes = timeToMinutes(config.specialFoodStartTime);
@@ -935,7 +990,6 @@ router.post('/mess/token/generate', authenticate, authorize('student'), async (r
 
             // Check Date
             if (todayStr !== config.specialFoodDate) {
-                fs.appendFileSync(path.join(__dirname, '../debug_token.log'), `[TOKEN GEN] Date mismatch: Today=${todayStr} vs Config=${config.specialFoodDate}\n`);
                 return res.status(403).json({
                     message: `Registration for ${config.specialFoodName} is only available on ${config.specialFoodDate}.`
                 });
@@ -995,7 +1049,7 @@ router.post('/mess/token/close', authenticate, authorize('warden', 'admin', 'mes
         const { tokenId, totalSpent, studentCount, wardenId } = req.body;
 
         // Logic: price = totalSpent / studentCount (if manual price not provided)
-        const price = totalSpent / studentCount;
+        const price = Math.round(totalSpent / studentCount);
 
         const token = await SpecialToken.findById(tokenId);
         if (!token) return res.status(404).json({ message: 'Token not found' });
@@ -1009,8 +1063,16 @@ router.post('/mess/token/close', authenticate, authorize('warden', 'admin', 'mes
         // Trigger balance update for student
         const student = await User.findById(token.student);
         if (student) {
-            // Re-fetch summary logic will handle feesBalance update on next client refresh
-            // But we could also proactively update here if needed.
+            // Updated summary will be fetched by client upon socket notification
+        }
+
+        // Notify all clients about the token closure and potential fee update
+        const io = req.app.get('socketio');
+        if (io) {
+            io.emit('token_closed', { tokenId, studentId: token.student });
+            // Also emit config_update to trigger fee refreshes in Student Dashboard
+            const config = await getSystemConfig();
+            io.emit('config_update', config);
         }
 
         res.json({ message: 'Token closed and billed', token });

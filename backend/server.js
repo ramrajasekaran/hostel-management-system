@@ -11,13 +11,13 @@ const app = express();
 const http = require('http').Server(app);
 const io = require('socket.io')(http, {
     cors: {
-        origin: "http://localhost:5173",
+        origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
         methods: ["GET", "POST"]
     }
 });
 
 app.use(cors({
-    origin: "http://localhost:5173",
+    origin: ["http://localhost:5173", "http://127.0.0.1:5173"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
     credentials: true
@@ -30,16 +30,15 @@ app.get('/', (req, res) => {
 
 app.use((req, res, next) => {
     console.log(`${req.method} ${req.url}`);
-    try {
-        fs.appendFileSync(path.join(__dirname, 'server_requests.log'), `${new Date().toISOString()} ${req.method} ${req.url}\n`);
-    } catch (e) { }
     next();
 });
 
 // Routes
 const { router: studentRoutes, startSecurityHeartbeat } = require('./routes/studentRoutes');
+const { initCron } = require('./services/cronService');
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/student', studentRoutes);
+app.use('/api/payment', require('./routes/paymentRoutes'));
 
 // Socket Control Logic
 io.on('connection', (socket) => {
@@ -59,6 +58,7 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/hostel_mana
         http.listen(PORT, () => {
             console.log(`Server running on port ${PORT}`);
             startSecurityHeartbeat(io); // Pass io to heartbeat
+            initCron(io); // Start Auto-Block Cron
         });
     })
     .catch(err => console.log(err));

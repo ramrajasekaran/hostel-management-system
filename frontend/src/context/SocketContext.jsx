@@ -9,7 +9,7 @@ export const SocketProvider = ({ children }) => {
     const [socket, setSocket] = useState(null);
 
     useEffect(() => {
-        const newSocket = io('http://localhost:5000');
+        const newSocket = io(`http://${window.location.hostname}:5001`);
         setSocket(newSocket);
 
         newSocket.on('connect', () => {

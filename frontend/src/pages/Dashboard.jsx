@@ -6,6 +6,8 @@ import { useSocket } from '../context/SocketContext';
 import BluetoothService from '../services/BluetoothService';
 import ErrorBoundary from '../components/ErrorBoundary';
 
+const API_BASE_URL = `http://${window.location.hostname}:5001`;
+
 // --- Shared Helper Utilities ---
 const formatDateIST = (dateStr) => {
     if (!dateStr) return '-';
@@ -32,8 +34,295 @@ const formatDateTimeIST = (dateStr) => {
     });
 };
 
+const PaymentReceipt = ({ data, student, onClose, isPreview = false, onPay }) => {
+    const [hostelAmount, setHostelAmount] = React.useState('');
+    const [messAmount, setMessAmount] = React.useState('');
+    if (!data || !student) return null;
+
+    const totalAmount = (Number(hostelAmount) || 0) + (Number(messAmount) || 0);
+
+    const handlePrint = () => {
+        if (!isPreview) window.print();
+    };
+
+    return (
+        <div className="receipt-modal-overlay">
+            <div className="receipt-modal-content no-print">
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem', gap: '1rem' }}>
+                    {isPreview ? (
+                        <>
+                            <button onClick={onClose} className="arena-btn-secondary" style={{ padding: '0.5rem 1.5rem' }}>Edit Details</button>
+                            <button onClick={onPay} className="arena-btn" style={{ padding: '0.5rem 2rem', background: 'var(--grad-premium)', border: 'none' }}>Pay Now</button>
+                        </>
+                    ) : (
+                        <>
+                            <button onClick={onClose} className="arena-btn-secondary" style={{ padding: '0.5rem 1rem' }}>Close</button>
+                            <button onClick={handlePrint} className="arena-btn" style={{ padding: '0.5rem 1rem' }}>Print / Download</button>
+                        </>
+                    )}
+                </div>
+            </div>
+
+            <div id="printable-receipt" className="receipt-paper">
+                <style>{`
+                    @media print {
+                        body { background: white !important; }
+                        body * { display: none !important; }
+                        #printable-receipt, #printable-receipt * { display: block !important; }
+                        #printable-receipt {
+                            display: block !important;
+                            position: absolute;
+                            left: 0;
+                            top: 0;
+                            width: 100%;
+                            padding: 0;
+                            margin: 0;
+                            box-shadow: none !important;
+                            background: white !important;
+                            color: black !important;
+                        }
+                        .receipt-grid { display: grid !important; }
+                        .receipt-row { display: flex !important; }
+                        .receipt-urn-box { display: grid !important; }
+                        .no-print { display: none !important; }
+                        .receipt-modal-content {
+                            box-shadow: none !important;
+                            border: 1px solid #eee !important;
+                            max-width: 100% !important;
+                            width: 100% !important;
+                            margin: 0 !important;
+                        }
+                    }
+                    /* Hide spin buttons for Firefox */
+                    input[type=number] {
+                        -moz-appearance: textfield;
+                    }
+                    /* Hide spin buttons for Chrome, Safari, Edge, Opera */
+                    input::-webkit-outer-spin-button,
+                    input::-webkit-inner-spin-button {
+                        -webkit-appearance: none;
+                        margin: 0;
+                    }
+                    .receipt-modal-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background: rgba(0,0,0,0.85);
+                        display: flex;
+                        flex-direction: column;
+                        align-items: center;
+                        justify-content: flex-start;
+                        padding-top: 2rem;
+                        z-index: 9999;
+                        overflow-y: auto;
+                    }
+                    .receipt-modal-content {
+                        width: 100%;
+                        max-width: 800px;
+                        padding: 0 1rem;
+                    }
+                    .receipt-paper {
+                        background: white;
+                        color: #333;
+                        width: 210mm;
+                        padding: 20mm;
+                        margin-bottom: 2rem;
+                        box-shadow: 0 0 20px rgba(0,0,0,0.5);
+                        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                    }
+                    .receipt-header {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        border-bottom: 2px solid #800000;
+                        padding-bottom: 1rem;
+                        margin-bottom: 2rem;
+                    }
+                    .receipt-title {
+                        text-align: center;
+                        text-transform: uppercase;
+                        color: #800000;
+                        font-weight: bold;
+                        font-size: 1.4rem;
+                        margin-bottom: 2rem;
+                        border-bottom: 1px solid #eee;
+                        padding-bottom: 0.5rem;
+                    }
+                    .receipt-grid {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr;
+                        gap: 1.5rem;
+                        margin-bottom: 2rem;
+                    }
+                    .receipt-row {
+                        display: flex;
+                        justify-content: space-between;
+                        padding: 0.4rem 0;
+                        border-bottom: 1px dashed #eee;
+                        font-size: 0.9rem;
+                    }
+                    .receipt-label { font-weight: bold; color: #666; }
+                    .receipt-value { font-weight: 500; }
+                    .receipt-urn-box {
+                        display: grid;
+                        grid-template-columns: 1fr 1fr 1fr;
+                        background: #f9f9f9;
+                        border: 1px solid #eee;
+                        padding: 1rem;
+                        text-align: center;
+                        margin-top: 2rem;
+                    }
+                    .urn-item h6 { margin: 0; color: #666; font-size: 0.75rem; text-transform: uppercase; }
+                    .urn-item p { margin: 0.3rem 0 0; font-weight: bold; font-size: 0.95rem; }
+                `}</style>
+
+                <div className="receipt-header">
+                    <div style={{ display: 'flex', alignItems: 'center' }}>
+                        <div style={{ width: '60px', height: '60px', background: '#ccc', borderRadius: '50%', marginRight: '1rem' }}></div>
+                        <div>
+                            <h2 style={{ margin: 0, fontSize: '1.2rem', color: '#800000' }}>HMS HOSTEL MANAGEMENT SYSTEM</h2>
+                            <p style={{ margin: 0, fontSize: '0.8rem', color: '#666' }}>Secure Student Residence Portal</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="receipt-title">{isPreview ? "Payment Draft (Preview)" : "Payment Slip"}</div>
+
+                <div className="receipt-grid">
+                    <div>
+                        <div className="receipt-row"><span className="receipt-label">Student Name:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.name}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Registration No:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.registerNo || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Department:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.department || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Father's Name:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.fatherName || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Hostel Name:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.hostelName || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Email ID:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.email || 'N/A'}</span></div>
+                    </div>
+                    <div>
+                        <div className="receipt-row"><span className="receipt-label">Generation Date:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{new Date().toLocaleDateString()}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Mobile No:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.mobile || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">Year/Batch:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.batch || 'N/A'}</span></div>
+                        <div className="receipt-row"><span className="receipt-label">DOB:</span> <span className="receipt-value" style={{ fontWeight: '800' }}>{student.dob || 'N/A'}</span></div>
+
+                        {isPreview ? (
+                            <>
+                                <div className="receipt-row" style={{ marginTop: '0.5rem' }}>
+                                    <span className="receipt-label" style={{ fontWeight: 'bold' }}>Hostel Fee:</span>
+                                    <span className="receipt-value">
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            autoComplete="off"
+                                            value={hostelAmount}
+                                            onChange={(e) => setHostelAmount(e.target.value)}
+                                            placeholder="Enter amount"
+                                            style={{
+                                                width: '120px',
+                                                border: '1px solid #ccc',
+                                                borderRadius: '4px',
+                                                padding: '4px 8px',
+                                                fontSize: '0.9rem',
+                                                color: '#800000'
+                                            }}
+                                        />
+                                    </span>
+                                </div>
+                                <div className="receipt-row">
+                                    <span className="receipt-label" style={{ fontWeight: 'bold' }}>Mess Fee:</span>
+                                    <span className="receipt-value">
+                                        <input
+                                            type="number"
+                                            step="any"
+                                            autoComplete="off"
+                                            value={messAmount}
+                                            onChange={(e) => setMessAmount(e.target.value)}
+                                            placeholder="Enter amount"
+                                            style={{
+                                                width: '120px',
+                                                border: '1px solid #ccc',
+                                                borderRadius: '4px',
+                                                padding: '4px 8px',
+                                                fontSize: '0.9rem',
+                                                color: '#800000'
+                                            }}
+                                        />
+                                    </span>
+                                </div>
+                                <div className="receipt-row" style={{ marginTop: '0.5rem', borderTop: '1px dashed #ccc', paddingTop: '0.5rem' }}>
+                                    <span className="receipt-label" style={{ fontWeight: '900' }}>TOTAL:</span>
+                                    <span className="receipt-value" style={{ fontWeight: '900', color: '#800000' }}>₹{totalAmount}</span>
+                                </div>
+                            </>
+                        ) : (
+                            <>
+                                {data.hostelAmount > 0 && (
+                                    <div className="receipt-row">
+                                        <span className="receipt-label">Hostel Fee:</span>
+                                        <span className="receipt-value" style={{ fontWeight: '800' }}>₹{data.hostelAmount}</span>
+                                    </div>
+                                )}
+                                {data.messAmount > 0 && (
+                                    <div className="receipt-row">
+                                        <span className="receipt-label">Mess Fee:</span>
+                                        <span className="receipt-value" style={{ fontWeight: '800' }}>₹{data.messAmount}</span>
+                                    </div>
+                                )}
+                                <div className="receipt-row" style={{ marginTop: '0.5rem', borderTop: '2px solid #eee', paddingTop: '0.5rem' }}>
+                                    <span className="receipt-label" style={{ fontWeight: '900', color: '#000' }}>AMOUNT PAID:</span>
+                                    <span className="receipt-value" style={{ fontWeight: '900', color: '#800000', fontSize: '1.1rem' }}>₹{data.amount}</span>
+                                </div>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                <div className="receipt-urn-box">
+                    <div className="urn-item">
+                        <h6>URN / Transaction ID</h6>
+                        <p>{isPreview ? "GENERATING..." : data.transactionId}</p>
+                    </div>
+                    <div className="urn-item">
+                        <h6>Status</h6>
+                        <p style={{ color: isPreview ? '#f59e0b' : '#22c55e' }}>{isPreview ? 'PENDING' : 'SUCCESS'}</p>
+                    </div>
+                    <div className="urn-item">
+                        <h6>Mode of Payment</h6>
+                        <p>{data.paymentMethod || 'Online'}</p>
+                    </div>
+                </div>
+
+                <div style={{ marginTop: '3rem', fontSize: '0.8rem', color: '#888' }}>
+                    <p style={{ fontWeight: 'bold', borderBottom: '1px solid #eee', width: 'fit-content', paddingBottom: '0.2rem' }}>Please note:</p>
+                    <p>1. This is a system generated receipt. {isPreview ? "Actual receipt will be available after payment." : "Hence it does not require physical signatures."}</p>
+                    <p>2. Payment Date: {isPreview ? new Date().toLocaleDateString() : new Date(data.paymentDate).toLocaleDateString()}</p>
+                </div>
+
+                {isPreview && (
+                    <div className="no-print" style={{ marginTop: '2rem', textAlign: 'center' }}>
+                        <button
+                            onClick={() => {
+                                if (totalAmount <= 0) {
+                                    alert("Please enter an amount for Hostel or Mess");
+                                    return;
+                                }
+                                onPay(hostelAmount, messAmount);
+                            }}
+                            className="arena-btn"
+                            style={{ width: '100%', padding: '1rem', background: 'var(--grad-premium)', border: 'none', fontSize: '1.1rem' }}
+                        >
+                            Confirm & Pay ₹{totalAmount}
+                        </button>
+                        <p style={{ fontSize: '0.75rem', color: '#888', marginTop: '0.5rem' }}>By clicking Pay, you agree to the terms of service.</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 const Dashboard = () => {
-    const { user, logout, loading } = useAuth();
+    const { user, logout, refreshUser, loading } = useAuth();
     const [activeTab, setActiveTab] = React.useState('profile');
     const hasInitialTabSet = React.useRef(false);
 
@@ -200,8 +489,41 @@ const Dashboard = () => {
                                                 <div className="profile-grid">
                                                     <ProfileItem label="Hostel" value={user?.hostelName} />
                                                     <ProfileItem label="Room" value={user?.roomNo} />
-                                                    <ProfileItem label="FP ID" value={user?.fingerprintId} />
-                                                    <ProfileItem label="Approval" value={user?.approvalNo} />
+                                                    <ProfileItem label="Current Status" value={user?.attendanceStatus} />
+                                                </div>
+                                                <div style={{ marginTop: '1.5rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)' }}>
+                                                    <button
+                                                        onClick={async () => {
+                                                            setLoading(true);
+                                                            try {
+                                                                const res = await fetch(`${API_BASE_URL}/api/student/attendance/mark`, {
+                                                                    method: 'POST',
+                                                                    headers: {
+                                                                        'Content-Type': 'application/json',
+                                                                        'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                                                                    },
+                                                                    body: JSON.stringify({
+                                                                        rollNo: user.rollNo,
+                                                                        manual: true
+                                                                    })
+                                                                });
+                                                                const data = await res.json();
+                                                                alert(data.message);
+                                                                if (res.ok) {
+                                                                    // Assuming refreshUser is available from useAuth or context
+                                                                    // If not, this line might need adjustment based on how user context is refreshed.
+                                                                    if (refreshUser) refreshUser();
+                                                                }
+                                                            } catch (err) {
+                                                                alert("Error marking attendance");
+                                                            }
+                                                            setLoading(false);
+                                                        }}
+                                                        className="arena-btn btn-primary"
+                                                        style={{ width: '100%' }}
+                                                    >
+                                                        Mark Present (Manual)
+                                                    </button>
                                                 </div>
                                             </div>
                                             <div className="arena-card animate-slide-up" style={{ border: '1px solid var(--accent-blue)', background: 'rgba(59,130,246,0.02)' }}>
@@ -246,7 +568,7 @@ const Dashboard = () => {
                                 {activeTab === 'fees' && (
                                     <div className="arena-card">
                                         <h3 className="section-title">Fees Dashboard</h3>
-                                        <FeesModule studentId={user?._id} initialFees={{ balance: user?.feesBalance, paid: user?.feesPaid }} />
+                                        <FeesModule student={user} initialFees={{ balance: user?.feesBalance, paid: user?.feesPaid }} />
                                     </div>
                                 )}
                             </ErrorBoundary>
@@ -308,7 +630,7 @@ const WardenApprovalModule = () => {
         if (val.length >= 2) {
             setLoading(true);
             try {
-                const res = await fetch(`http://localhost:5000/api/student/leave/search/${val}`, {
+                const res = await fetch(`${API_BASE_URL}/api/student/leave/search/${val}`, {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
                 });
                 const data = await res.json();
@@ -328,7 +650,22 @@ const WardenApprovalModule = () => {
 
     const handleAction = async (leaveId, status) => {
         try {
-            await fetch(`http://localhost:5000/api/student/leave/approve/warden`, {
+            await fetch(`${API_BASE_URL}/api/student/leave/approve/warden`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                },
+                body: JSON.stringify({ leaveId, status })
+            });
+            // Refresh results
+            handleSearch(search);
+        } catch (err) { }
+    };
+
+    const handleParentAction = async (leaveId, status) => {
+        try {
+            await fetch(`${API_BASE_URL}/api/student/leave/approve/parent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -344,7 +681,7 @@ const WardenApprovalModule = () => {
     const fetchAllPending = async () => {
         setLoading(true);
         try {
-            const res = await fetch(`http://localhost:5000/api/student/leave/search/ALL`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/leave/search/ALL`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -370,7 +707,7 @@ const WardenApprovalModule = () => {
                     </button>
                 </div>
                 <div style={{ position: 'relative', marginBottom: '1.5rem' }}>
-                    <label className="field-label">Quick Search (ID / Roll No / Reg No)</label>
+                    <label className="field-label">Quick Search (Roll No / Reg No)</label>
                     <input
                         type="text"
                         className="arena-input"
@@ -400,7 +737,7 @@ const WardenApprovalModule = () => {
                                 <div>
                                     <h4 style={{ color: 'var(--accent-blue)', marginBottom: '4px' }}>{l.student.name}</h4>
                                     <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                        Reg No: {l.student.registerNo} | Room: {l.student.roomNo} | ID: {l.student.approvalNo}
+                                        Reg No: {l.student.registerNo} | Room: {l.student.roomNo}
                                     </p>
                                 </div>
                                 <div style={{ textAlign: 'right' }}>
@@ -431,6 +768,16 @@ const WardenApprovalModule = () => {
                                     Reject
                                 </button>
                             </div>
+
+                            {l.wardenStatus === 'Approved' && l.parentStatus === 'Pending' && (
+                                <button
+                                    onClick={() => handleParentAction(l._id, 'Approved')}
+                                    className="arena-btn btn-primary"
+                                    style={{ width: '100%', marginTop: '1rem', background: 'var(--accent-blue)' }}
+                                >
+                                    ✅ Verbal Parent Approval (Override)
+                                </button>
+                            )}
 
                             {l.wardenStatus === 'Approved' && (
                                 <button
@@ -471,7 +818,7 @@ const BlockedStudentsModule = () => {
 
     const fetchBlocked = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/blocked-students', {
+            const res = await fetch('${API_BASE_URL}/api/student/blocked-students', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -487,7 +834,7 @@ const BlockedStudentsModule = () => {
     const handleUnblock = async (studentId) => {
         if (!window.confirm("Are you sure you want to unblock this student?")) return;
         try {
-            const res = await fetch('http://localhost:5000/api/student/block-status', {
+            const res = await fetch('${API_BASE_URL}/api/student/block-status', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -502,7 +849,7 @@ const BlockedStudentsModule = () => {
     const handleUnblockAll = async () => {
         if (!window.confirm("CRITICAL: Are you sure you want to restore access for ALL blocked students?")) return;
         try {
-            const res = await fetch('http://localhost:5000/api/student/unblock-all', {
+            const res = await fetch('${API_BASE_URL}/api/student/unblock-all', {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
@@ -512,7 +859,9 @@ const BlockedStudentsModule = () => {
 
     const filtered = (Array.isArray(blockedStudents) ? blockedStudents : []).filter(s =>
         s.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.rollNo?.toLowerCase().includes(searchTerm.toLowerCase())
+        s.rollNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.registerNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        s.approvalNo?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     return (
@@ -536,7 +885,7 @@ const BlockedStudentsModule = () => {
             <div style={{ marginBottom: '1.5rem' }}>
                 <input
                     type="text"
-                    placeholder="Search by name or roll number..."
+                    placeholder="Search by Name, Roll No, or Reg No..."
                     value={searchTerm}
                     onChange={e => setSearchTerm(e.target.value)}
                     className="arena-input"
@@ -567,7 +916,9 @@ const BlockedStudentsModule = () => {
                         }}>
                             <div>
                                 <p style={{ fontWeight: '600', color: '#ef4444' }}>{s.name}</p>
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Roll No: {s.rollNo} | Room: {s.roomNo}</p>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                    Reg No: {s.registerNo} | Roll No: {s.rollNo} | Room: {s.roomNo}
+                                </p>
                             </div>
                             <button
                                 onClick={() => handleUnblock(s._id)}
@@ -602,7 +953,7 @@ const SecuritySettingsModule = () => {
 
     const fetchConfig = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/config');
+            const res = await fetch('${API_BASE_URL}/api/student/config');
             const data = await res.json();
             if (data.attendanceStart) setConfig(data);
         } catch (err) { }
@@ -617,7 +968,7 @@ const SecuritySettingsModule = () => {
         e.preventDefault();
         setSaving(true);
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -839,7 +1190,7 @@ const LeaveStatusSummary = ({ studentId }) => {
 
     const fetchLatest = async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/leave/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/leave/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -949,7 +1300,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
 
     const fetchConfig = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             if (res.ok) {
@@ -961,7 +1312,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
 
     const fetchLeaves = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/leave/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/leave/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -988,7 +1339,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd.entries());
         try {
-            const res = await fetch('http://localhost:5000/api/student/leave', {
+            const res = await fetch('${API_BASE_URL}/api/student/leave', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1012,7 +1363,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
 
     const simulateApprove = async (leaveId, actor, status) => {
         try {
-            await fetch(`http://localhost:5000/api/student/leave/approve/${actor}`, {
+            await fetch(`${API_BASE_URL}/api/student/leave/approve/${actor}`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1027,7 +1378,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
     const handleCancelLeave = async (leaveId) => {
         if (!window.confirm("Are you sure you want to withdraw this leave application?")) return;
         try {
-            const res = await fetch(`http://localhost:5000/api/student/leave/${leaveId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/leave/${leaveId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
@@ -1039,7 +1390,7 @@ const LeaveModule = ({ studentId, setActiveTab }) => {
 
     const generateOutpass = async (leaveId, type) => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/leave/generate-outpass', {
+            const res = await fetch('${API_BASE_URL}/api/student/leave/generate-outpass', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1170,7 +1521,7 @@ const OutpassModule = ({ studentId }) => {
 
     const fetchLeaves = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/leave/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/leave/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -1196,7 +1547,7 @@ const OutpassModule = ({ studentId }) => {
         }
 
         try {
-            const res = await fetch('http://localhost:5000/api/student/leave/generate-outpass', {
+            const res = await fetch('${API_BASE_URL}/api/student/leave/generate-outpass', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1388,7 +1739,7 @@ const ComplaintModule = ({ studentId }) => {
 
     const fetchComplaints = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/complaint/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/complaint/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -1414,7 +1765,7 @@ const ComplaintModule = ({ studentId }) => {
         const fd = new FormData(e.target);
         const data = Object.fromEntries(fd.entries());
         try {
-            await fetch('http://localhost:5000/api/student/complaint', {
+            await fetch('${API_BASE_URL}/api/student/complaint', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1485,7 +1836,7 @@ const StudentMessModule = ({ studentId }) => {
 
     const fetchConfig = React.useCallback(async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             if (res.ok) {
@@ -1497,7 +1848,7 @@ const StudentMessModule = ({ studentId }) => {
 
     const fetchTokens = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/mess/tokens/student/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/mess/tokens/student/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -1525,15 +1876,24 @@ const StudentMessModule = ({ studentId }) => {
                     }
                 }
             });
+
+            socket.on('token_closed', (data) => {
+                if (data.studentId === studentId) {
+                    fetchTokens();
+                }
+            });
         }
 
         // Auto-poll config every 10 seconds as fallback
         const interval = setInterval(fetchConfig, 10000);
         return () => {
             clearInterval(interval);
-            if (socket) socket.off('config_update');
+            if (socket) {
+                socket.off('config_update');
+                socket.off('token_closed');
+            }
         };
-    }, [fetchTokens, fetchConfig, socket]);
+    }, [fetchTokens, fetchConfig, socket, studentId, selectedFood]);
 
     const handleGenerate = async (type) => {
         if (!selectedFood && (config?.specialFoodNames?.length > 0)) {
@@ -1542,7 +1902,7 @@ const StudentMessModule = ({ studentId }) => {
         }
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/student/mess/token/generate', {
+            const res = await fetch('${API_BASE_URL}/api/student/mess/token/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1899,7 +2259,7 @@ const MessManagementModule = () => {
 
     const fetchConfig = React.useCallback(async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -1953,7 +2313,7 @@ const MessManagementModule = () => {
 
     const fetchActiveTokens = React.useCallback(async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/mess/tokens/active', {
+            const res = await fetch('${API_BASE_URL}/api/student/mess/tokens/active', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -1988,7 +2348,7 @@ const MessManagementModule = () => {
         const updatedList = [...masterList, newItem];
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2008,7 +2368,7 @@ const MessManagementModule = () => {
         const updatedList = masterList.filter(i => i !== itemToRemove);
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/student/config', {
+            const res = await fetch('${API_BASE_URL}/api/student/config', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2034,7 +2394,7 @@ const MessManagementModule = () => {
                 hostelBillingCycle: feeInputs.hostelBillingCycle || config.hostelBillingCycle,
                 messBillingCycle: feeInputs.messBillingCycle || config.messBillingCycle
             };
-            const res = await fetch('http://localhost:5000/api/student/fees/structure', {
+            const res = await fetch('${API_BASE_URL}/api/student/fees/structure', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2045,8 +2405,19 @@ const MessManagementModule = () => {
             if (res.ok) {
                 await fetchConfig();
                 alert(`Mess System Settings Saved Successfully! 💾`);
+            } else {
+                const errorData = await res.json();
+                alert(`Error: ${errorData.message || 'Failed to update settings'}`);
+                if (res.status === 401) {
+                    // Token expired or invalid
+                    localStorage.removeItem('hms_token');
+                    window.location.href = '/login';
+                }
             }
-        } catch (err) { }
+        } catch (err) {
+            console.error('Update Error:', err);
+            alert('A network error occurred while saving settings.');
+        }
         setLoading(false);
     };
 
@@ -2057,7 +2428,7 @@ const MessManagementModule = () => {
         }
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:5000/api/student/mess/token/close', {
+            const res = await fetch('${API_BASE_URL}/api/student/mess/token/close', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -2373,7 +2744,7 @@ const MessManagementModule = () => {
                                                     },
                                                     lastUpdated: new Date()
                                                 };
-                                                await fetch('http://localhost:5000/api/student/config', {
+                                                await fetch('${API_BASE_URL}/api/student/config', {
                                                     method: 'POST',
                                                     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
                                                     body: JSON.stringify({ regularMenu: updatedRegular })
@@ -2411,7 +2782,7 @@ const MessManagementModule = () => {
                                             },
                                             lastUpdated: new Date()
                                         };
-                                        await fetch('http://localhost:5000/api/student/config', {
+                                        await fetch('${API_BASE_URL}/api/student/config', {
                                             method: 'POST',
                                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
                                             body: JSON.stringify({ regularMenu: updatedMenu })
@@ -2468,7 +2839,7 @@ const MessManagementModule = () => {
                         onClick={async () => {
                             setLoading(true);
                             try {
-                                const res = await fetch('http://localhost:5000/api/student/config', {
+                                const res = await fetch('${API_BASE_URL}/api/student/config', {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
@@ -2645,7 +3016,7 @@ const MessManagementModule = () => {
                             onClick={async () => {
                                 setLoading(true);
                                 try {
-                                    await fetch('http://localhost:5000/api/student/config', {
+                                    await fetch('${API_BASE_URL}/api/student/config', {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` },
                                         body: JSON.stringify({ weeklyMenu })
@@ -2777,7 +3148,7 @@ const MessManagementModule = () => {
                                 e.preventDefault();
                                 setLoading(true);
                                 try {
-                                    const res = await fetch('http://localhost:5000/api/student/config', {
+                                    const res = await fetch('${API_BASE_URL}/api/student/config', {
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -3001,7 +3372,7 @@ const MessManagementModule = () => {
                                         onClick={async () => {
                                             setLoading(true);
                                             try {
-                                                const res = await fetch('http://localhost:5000/api/student/config', {
+                                                const res = await fetch('${API_BASE_URL}/api/student/config', {
                                                     method: 'POST',
                                                     headers: {
                                                         'Content-Type': 'application/json',
@@ -3101,7 +3472,10 @@ const MessManagementModule = () => {
     );
 };
 
-const FeesModule = ({ studentId, initialFees }) => {
+const FeesModule = ({ student, initialFees }) => {
+    const { user } = useAuth();
+    const socket = useSocket();
+    const studentId = student?._id;
     const [fees, setFees] = React.useState({
         balance: initialFees?.balance || 0,
         paid: initialFees?.paid || 0,
@@ -3115,10 +3489,14 @@ const FeesModule = ({ studentId, initialFees }) => {
     const [amount, setAmount] = React.useState('');
     const [loading, setLoading] = React.useState(false);
     const [fetching, setFetching] = React.useState(true);
+    const [selectedReceipt, setSelectedReceipt] = React.useState(null);
+    const [feeType, setFeeType] = React.useState('Hostel');
+    const [showPaymentOptions, setShowPaymentOptions] = React.useState(true); // Default to true now
+    const [showPreview, setShowPreview] = React.useState(false);
 
     const fetchSummary = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/fees/summary/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/fees/summary/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -3128,15 +3506,22 @@ const FeesModule = ({ studentId, initialFees }) => {
                 pending: data.feesPending,
                 totalDue: data.totalDue,
                 structure: data.structure,
+                hostel: data.hostel,
+                mess: data.mess,
                 hostelBillingCycle: data.hostelBillingCycle || 'Yearly',
                 messBillingCycle: data.messBillingCycle || 'Yearly'
             });
-        } catch (err) { }
+        } catch (err) {
+            if (err.message === '401') {
+                localStorage.removeItem('hms_token');
+                window.location.href = '/login';
+            }
+        }
     }, [studentId]);
 
     const fetchHistory = React.useCallback(async () => {
         try {
-            const res = await fetch(`http://localhost:5000/api/student/fees/history/${studentId}`, {
+            const res = await fetch(`${API_BASE_URL}/api/student/fees/history/${studentId}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -3152,34 +3537,164 @@ const FeesModule = ({ studentId, initialFees }) => {
     }, [studentId]);
 
     React.useEffect(() => {
-        fetchSummary();
-        fetchHistory();
-    }, [fetchSummary, fetchHistory]);
+        if (studentId) {
+            fetchSummary();
+            fetchHistory();
+        }
 
-    const handlePay = async (e) => {
-        e.preventDefault();
-        if (!amount || amount <= 0) return;
+        if (socket) {
+            socket.on('config_update', () => fetchSummary());
+            socket.on('token_closed', (data) => {
+                if (data.studentId === studentId) {
+                    fetchSummary();
+                    fetchHistory();
+                }
+            });
+        }
+
+        return () => {
+            if (socket) {
+                socket.off('config_update');
+                socket.off('token_closed');
+            }
+        };
+    }, [fetchSummary, fetchHistory, studentId, socket]);
+
+    const loadRazorpay = () => {
+        return new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            script.onload = () => resolve(true);
+            script.onerror = () => resolve(false);
+            document.body.appendChild(script);
+        });
+    };
+
+    const handleGeneratePreview = (e) => {
+        if (e) e.preventDefault();
+        setShowPreview(true);
+    };
+
+    const handlePay = async (hAmt, mAmt) => {
+        const total = (Number(hAmt) || 0) + (Number(mAmt) || 0);
+        let finalFeeType = 'Hostel';
+        if (hAmt > 0 && mAmt > 0) finalFeeType = 'Both';
+        else if (mAmt > 0) finalFeeType = 'Mess';
+
+        console.log("Initiating payment:", studentId, "Total:", total, "H:", hAmt, "M:", mAmt);
         setLoading(true);
+        setShowPreview(false);
+
+        const res = await loadRazorpay();
+        if (!res) {
+            alert('Razorpay SDK failed to load. Are you online?');
+            console.error("Razorpay SDK failed to load");
+            setLoading(false);
+            return;
+        }
+        console.log("Razorpay SDK loaded successfully");
+
         try {
-            const res = await fetch('http://localhost:5000/api/student/fees/pay', {
+            // Create Order
+            console.log("Creating order...");
+            const orderRes = await fetch('${API_BASE_URL}/api/payment/create-order', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
                 },
-                body: JSON.stringify({ studentId, amount })
+                body: JSON.stringify({
+                    amount: total,
+                    feeType: finalFeeType,
+                    hostelAmount: hAmt,
+                    messAmount: mAmt,
+                    currency: "INR"
+                })
             });
-            if (res.ok) {
-                setAmount('');
-                fetchSummary();
-                fetchHistory();
-                alert('Payment Successful!');
-            } else {
-                const data = await res.json();
-                alert(data.message);
+
+            if (!orderRes.ok) {
+                const errorText = await orderRes.text();
+                console.error("Order creation failed status:", orderRes.status, "body:", errorText);
+                alert(`Order creation failed (Status: ${orderRes.status}). Message: ${errorText}`);
+                setLoading(false);
+                return;
             }
-        } catch (err) { }
-        setLoading(false);
+
+            const orderData = await orderRes.json();
+
+            const { order } = orderData;
+            console.log("Order details:", order);
+
+            const options = {
+                key: "rzp_test_S4pjadx1zhsYkI", // Test Key
+                amount: order.amount,
+                currency: order.currency,
+                name: "Hostel Management System",
+                description: "Student Fee Payment",
+                order_id: order.id,
+                handler: async function (response) {
+                    console.log("Payment successful, verifying...", response);
+                    try {
+                        const verifyRes = await fetch('${API_BASE_URL}/api/payment/verify', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${localStorage.getItem('hms_token')}`
+                            },
+                            body: JSON.stringify({
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                                studentId: studentId,
+                                amount: total,
+                                feeType: finalFeeType,
+                                hostelAmount: hAmt,
+                                messAmount: mAmt
+                            })
+                        });
+
+                        const verifyData = await verifyRes.json();
+                        console.log("Verification response:", verifyData);
+
+                        if (verifyData.success) {
+                            setAmount(''); // Clear amount after success
+                            await fetchSummary();
+                            await fetchHistory();
+                            alert("Payment Successful!");
+                        } else {
+                            alert("Payment Verification Failed: " + (verifyData.message || "Unknown error"));
+                        }
+                    } catch (error) {
+                        console.error("Payment Verification Error:", error);
+                        alert("Payment Verification Error");
+                    } finally {
+                        setLoading(false);
+                    }
+                },
+                modal: {
+                    ondismiss: function () {
+                        console.log("Payment modal closed by user");
+                        setLoading(false);
+                    }
+                },
+                prefill: {
+                    name: student?.name || '',
+                    email: student?.email || '',
+                    contact: student?.mobile || ''
+                },
+                theme: {
+                    color: "#800000"
+                }
+            };
+
+            const paymentObject = new window.Razorpay(options);
+            paymentObject.open();
+
+        } catch (error) {
+            console.error("Payment Error Detailed:", error);
+            alert(`Error initiating payment (Code: 5001-FIX): ${error.message}`);
+            setLoading(false);
+        }
     };
 
     return (
@@ -3188,7 +3703,19 @@ const FeesModule = ({ studentId, initialFees }) => {
                 <div className="arena-card" style={{ textAlign: 'center', background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.2)' }}>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Pending</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#ef4444' }}>₹{Math.round(fees.pending)}</p>
-                    <p style={{ fontSize: '0.7rem', opacity: 0.6 }}>Total Due: ₹{Math.round(fees.totalDue)} ({fees.structure})</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ opacity: 0.7 }}>Hostel Pending:</span>
+                            <span style={{ fontWeight: 'bold' }}>₹{Math.round(fees.hostel?.pending || 0)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ opacity: 0.7 }}>Mess Pending:</span>
+                            <span style={{ fontWeight: 'bold' }}>₹{Math.round(fees.mess?.pending || 0)}</span>
+                        </div>
+                    </div>
+
+                    <p style={{ fontSize: '0.7rem', opacity: 0.6, marginTop: '12px' }}>Total Due: ₹{Math.round(fees.totalDue)} ({fees.structure})</p>
                     <p style={{ fontSize: '0.65rem', opacity: 0.5, marginTop: '4px' }}>
                         Hostel: {fees.hostelBillingCycle} | Mess: {fees.messBillingCycle}
                     </p>
@@ -3196,26 +3723,40 @@ const FeesModule = ({ studentId, initialFees }) => {
                 <div className="arena-card" style={{ textAlign: 'center', background: 'rgba(34,197,94,0.05)', border: '1px solid rgba(34,197,94,0.2)' }}>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '0.5rem' }}>Fees Paid</p>
                     <p style={{ fontSize: '1.8rem', fontWeight: 'bold', color: '#22c55e' }}>₹{Math.round(fees.paid)}</p>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '12px', padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ opacity: 0.7 }}>Hostel Paid:</span>
+                            <span style={{ fontWeight: 'bold', color: '#22c55e' }}>₹{Math.round(fees.hostel?.paid || 0)}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem' }}>
+                            <span style={{ opacity: 0.7 }}>Mess Paid:</span>
+                            <span style={{ fontWeight: 'bold', color: '#22c55e' }}>₹{Math.round(fees.mess?.paid || 0)}</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <form onSubmit={handlePay} className="mobile-stack" style={{ display: 'flex', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1.5rem', borderRadius: '12px', border: '1px solid var(--border-main)' }}>
-                <div style={{ flex: 1 }}>
-                    <label className="field-label" style={{ marginBottom: '8px', display: 'block' }}>Payment Gateway</label>
-                    <input
-                        type="number"
-                        className="arena-input"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder="Enter amount to pay"
-                        max={fees.pending}
-                        required
-                    />
-                </div>
-                <button type="submit" className="arena-btn" style={{ alignSelf: 'flex-end', height: '45px', whiteSpace: 'nowrap' }} disabled={loading || fees.pending <= 0}>
-                    {loading ? 'Processing...' : 'Secure Pay Now'}
+            <div style={{ textAlign: 'center' }}>
+                <button
+                    onClick={handleGeneratePreview}
+                    className="arena-btn animate-pulse"
+                    style={{
+                        width: '100%',
+                        padding: '1.2rem',
+                        fontSize: '1.2rem',
+                        background: 'var(--grad-premium)',
+                        boxShadow: '0 8px 32px rgba(128, 0, 0, 0.4)',
+                        border: 'none'
+                    }}
+                    disabled={loading}
+                >
+                    {loading ? 'Processing...' : `Pay Hostel / Mess Fees`}
                 </button>
-            </form>
+                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '1rem' }}>
+                    Click to generate a payment receipt and choose fee type/amount.
+                </p>
+            </div>
 
             <div className="arena-card" style={{ background: 'rgba(255,255,255,0.02)' }}>
                 <h4 style={{ fontSize: '1rem', marginBottom: '1.5rem', color: 'var(--accent-blue)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -3241,24 +3782,56 @@ const FeesModule = ({ studentId, initialFees }) => {
                             }}>
                                 <div>
                                     <p style={{ fontWeight: '600', fontSize: '0.9rem' }}>₹{item.amount}</p>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ID: {item.transactionId}</p>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>ID: {item.transactionId} | <span style={{ color: 'var(--accent-blue)', fontWeight: 'bold' }}>{item.feeType || 'Hostel'}</span></p>
                                 </div>
-                                <div style={{ textAlign: 'right' }}>
-                                    <span style={{
-                                        fontSize: '0.65rem',
-                                        padding: '2px 8px',
-                                        borderRadius: '40px',
-                                        background: 'rgba(34,197,94,0.1)',
-                                        color: '#22c55e',
-                                        fontWeight: 'bold'
-                                    }}>SUCCESS</span>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{formatDateIST(item.paymentDate)}</p>
+                                <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                    <div style={{ textAlign: 'right' }}>
+                                        <span style={{
+                                            fontSize: '0.65rem',
+                                            padding: '2px 8px',
+                                            borderRadius: '40px',
+                                            background: 'rgba(34,197,94,0.1)',
+                                            color: '#22c55e',
+                                            fontWeight: 'bold'
+                                        }}>SUCCESS</span>
+                                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '4px' }}>{formatDateIST(item.paymentDate)}</p>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedReceipt(item)}
+                                        className="arena-btn"
+                                        style={{ padding: '4px 12px', fontSize: '0.7rem', height: 'auto' }}
+                                    >
+                                        Receipt
+                                    </button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 )}
             </div>
+
+            {showPreview && (
+                <PaymentReceipt
+                    data={{
+                        amount: amount,
+                        feeType: feeType,
+                        paymentDate: new Date(),
+                        transactionId: 'PREVIEW'
+                    }}
+                    student={student}
+                    isPreview={true}
+                    onPay={handlePay}
+                    onClose={() => setShowPreview(false)}
+                />
+            )}
+
+            {selectedReceipt && (
+                <PaymentReceipt
+                    data={selectedReceipt}
+                    student={student}
+                    onClose={() => setSelectedReceipt(null)}
+                />
+            )}
         </div>
     );
 };
@@ -3285,7 +3858,7 @@ const StudentResidentModule = () => {
 
     const fetchStudents = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/all-students', {
+            const res = await fetch('${API_BASE_URL}/api/student/all-students', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -3357,7 +3930,7 @@ const StudentResidentModule = () => {
                     <button
                         onClick={async () => {
                             if (!window.confirm("CRITICAL ACTION: This will automatically BLOCK all students currently marked as 'Absent'. Proceed?")) return;
-                            const res = await fetch('http://localhost:5000/api/student/block-absentees', {
+                            const res = await fetch('${API_BASE_URL}/api/student/block-absentees', {
                                 method: 'POST',
                                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
                             });
@@ -3418,7 +3991,7 @@ const StudentResidentModule = () => {
                                         <button
                                             onClick={async () => {
                                                 if (!window.confirm(`Are you sure you want to ${s.isBlocked ? 'unblock' : 'block'} this student?`)) return;
-                                                const res = await fetch('http://localhost:5000/api/student/block-status', {
+                                                const res = await fetch('${API_BASE_URL}/api/student/block-status', {
                                                     method: 'POST',
                                                     headers: {
                                                         'Content-Type': 'application/json',
@@ -3478,7 +4051,7 @@ const StudentResidentModule = () => {
                         <div className="mobile-stack" style={{ marginTop: '2rem', display: 'flex', gap: '1rem' }}>
                             <button
                                 onClick={async () => {
-                                    await fetch(`http://localhost:5000/api/student/student/${editingStudent._id}`, {
+                                    await fetch(`${API_BASE_URL}/api/student/student/${editingStudent._id}`, {
                                         method: 'PUT',
                                         headers: {
                                             'Content-Type': 'application/json',
@@ -3510,7 +4083,7 @@ const WardenComplaintModule = () => {
 
     const fetchAllComplaints = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/all-complaints', {
+            const res = await fetch('${API_BASE_URL}/api/student/all-complaints', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -3527,7 +4100,7 @@ const WardenComplaintModule = () => {
 
     const handleStatusUpdate = async (complaintId, status) => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/complaint/status', {
+            const res = await fetch('${API_BASE_URL}/api/student/complaint/status', {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3623,7 +4196,7 @@ const WardenFeesModule = () => {
         if (val.length >= 2) { // As requested: last two digits or more
             setLoading(true);
             try {
-                const res = await fetch(`http://localhost:5000/api/student/fees/search/${val}`, {
+                const res = await fetch(`${API_BASE_URL}/api/student/fees/search/${val}`, {
                     headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
                 });
                 const data = await res.json();
@@ -3699,8 +4272,8 @@ const LabourModule = () => {
         setLoading(true);
         try {
             const url = query
-                ? `http://localhost:5000/api/student/labour/search/${query}`
-                : `http://localhost:5000/api/student/labour/all`;
+                ? `${API_BASE_URL}/api/student/labour/search/${query}`
+                : `${API_BASE_URL}/api/student/labour/all`;
             const res = await fetch(url, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
@@ -3716,7 +4289,7 @@ const LabourModule = () => {
 
     const handleAttendance = async (employeeId, status) => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/labour/attendance', {
+            const res = await fetch('${API_BASE_URL}/api/student/labour/attendance', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3792,7 +4365,7 @@ const SalaryModule = () => {
 
     const fetchEmployees = async () => {
         try {
-            const res = await fetch('http://localhost:5000/api/student/labour/all', {
+            const res = await fetch('${API_BASE_URL}/api/student/labour/all', {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const data = await res.json();
@@ -3809,12 +4382,12 @@ const SalaryModule = () => {
         setLoading(true);
         try {
             const now = new Date();
-            const resSummary = await fetch(`http://localhost:5000/api/student/labour/attendance/summary/${emp._id}/${now.getMonth() + 1}/${now.getFullYear()}`, {
+            const resSummary = await fetch(`${API_BASE_URL}/api/student/labour/attendance/summary/${emp._id}/${now.getMonth() + 1}/${now.getFullYear()}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const summary = await resSummary.json();
 
-            const resHistory = await fetch(`http://localhost:5000/api/student/labour/salary/history/${emp._id}`, {
+            const resHistory = await fetch(`${API_BASE_URL}/api/student/labour/salary/history/${emp._id}`, {
                 headers: { 'Authorization': `Bearer ${localStorage.getItem('hms_token')}` }
             });
             const historyData = await resHistory.json();
@@ -3833,7 +4406,7 @@ const SalaryModule = () => {
         const now = new Date();
         const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
         try {
-            const res = await fetch('http://localhost:5000/api/student/labour/salary/pay', {
+            const res = await fetch('${API_BASE_URL}/api/student/labour/salary/pay', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

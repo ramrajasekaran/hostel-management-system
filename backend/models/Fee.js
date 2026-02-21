@@ -27,6 +27,28 @@ const feeSchema = new mongoose.Schema({
     paymentMethod: {
         type: String,
         default: 'Online'
+    },
+    razorpayOrderId: {
+        type: String
+    },
+    razorpayPaymentId: {
+        type: String
+    },
+    feeType: {
+        type: String,
+        enum: ['Hostel', 'Mess', 'Both'],
+        default: 'Hostel'
+    },
+    hostelAmount: {
+        type: Number,
+        default: 0
+    },
+    messAmount: {
+        type: Number,
+        default: 0
+    },
+    razorpaySignature: {
+        type: String
     }
 }, { timestamps: true });
 
